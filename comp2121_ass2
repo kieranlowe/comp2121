@@ -113,7 +113,7 @@ MAIN:
 	ldi cmask, INITCOLMASK			; 1110 1111
 	clr col
 
-;	Start the timer only if elevator NEEDS to move, otherwise keep scanning keypad. HOW???
+;	Start the timer only if elevator NEEDS to move, otherwise keep scanning keypad. HOW??? Use a register to mark it?
 	sei
 	
 ;	If something was pressed, wait
@@ -227,7 +227,6 @@ store_register_val:
 letters:
 	rjmp main
 
-
 ;	Case for symbols
 symbols:
 ;	Case for butthole (*)
@@ -256,8 +255,7 @@ zero_case:
 	st Z, temp2
 	rjmp main
 
-
-;	Print current floor, 
+;	Print current floor. Don't know WHEN tho.
 PRINT_CURRENT_FLOOR
 	do_lcd_data 'C'
 	do_lcd_data 'u'
@@ -275,7 +273,6 @@ PRINT_CURRENT_FLOOR
 	do_lcd_data ':'
 	do_lcd_data_alt curr_floor
 	do_lcd_command 0b11000000 	; set address to second line
-PRINT_FLOOR_THINGY:
 	ldi ZL, low(floor_register)
 	ldi ZH, high(floor_register)
 	ldi temp1, 0
@@ -287,6 +284,7 @@ PRINT_ITERATE:
 	inc temp1
 	do_lcd_data ' '
 	do_lcd_data ' '
+
 	cpi temp1, 11
 	breq PRINT_END
 
@@ -297,6 +295,7 @@ PRINT_FLOOR:
 	do_lcd_data ' '
 	jmp PRINT_ITERATE
 
+;	End here, dont know where to go.
 PRINT_END:
 	rjmp SOMETHING
 
@@ -316,7 +315,7 @@ Timer0OVF:
 	jmp CHECK_DIR
 
 ;	Increment the tempCounter, when tempCounter hits 1 second, add 1 second to secondCounter. When secondCounter has hit 2, increment curr_floor
-INCREMENT_TIMER
+INCREMENT_TIMER:
 	lds r24, tempCounter
 	lds r25, tempCounter+1
 	adiw r25:r24, 1
@@ -350,7 +349,7 @@ ENDIF:
 	reti
 
 
-:	Check what direction to go depending on what dir is defined
+;	Check what direction to go depending on what dir is defined
 CHECK_DIR:
 	cpi dir, 1
 	breq ITERATE_UP
@@ -371,6 +370,7 @@ CHECK_FLOOR_U:
 	jmp CHECK_FLOOR_U
 
 ;	Check if this the floor you need to stop at
+;	If you are currently on this floor, then stop the elevator and change the value of the floor_register.
 CHECK_IF_U:
 	cpi temp1, curr_floor
 	brge do_something_u
