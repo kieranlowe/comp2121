@@ -55,7 +55,7 @@
 .def dir = r23					; 0 means down, 1 means up
 .def curr_floor = r24
 
-.equ number_w = 0x30			; binary for 0011, used to write numbers (i.e. 0011 0000 is 0)
+.equ number_w = 0x30			; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
 
 .equ PORTLDIR = 0xF0			; 1111 0000
 .equ INITCOLMASK = 0xEF			; 1110 1111, right most column
@@ -88,7 +88,7 @@ RESET:
 	do_lcd_command 0b00000110 	; increment, no display shift
 	do_lcd_command 0b00001100 	; display on, cursor on, no blink
 
-;	Setup timer and enable timer
+;	Setup timer and enable interrupt (do not activate yet)
 	clear TempCounter  			; Initialize the temporary counter to 0
 	clear SecondCounter  		; Initialize the second counter to 0
 	ldi temp1, 0b00000000
@@ -113,6 +113,9 @@ MAIN:
 	ldi cmask, INITCOLMASK			; 1110 1111
 	clr col
 
+;	Start the timer only if elevator NEEDS to move, otherwise keep scanning keypad. HOW???
+	sei
+	
 ;	If something was pressed, wait
 	cpi pushed, 1
 	breq WAIT
@@ -132,9 +135,6 @@ WAIT:
 	rjmp WAIT
 READY:
 	ldi pushed, 0
-
-;	Start the timer
-	sei
 	jmp main
 
 
@@ -208,8 +208,7 @@ convert:
 	inc temp1
 	jmp add_to_register
 
-;	Load the register values
-;	Move Z to the appropriate floor
+;	Load the register values from data memory
 add_to_register:
 	ldi ZL, low(floor_register)
 	ldi ZH, high(floor_register)
@@ -224,6 +223,7 @@ store_register_val:
 	st Z, temp1
 	rjmp main
 
+;	Do nothing, return to main
 letters:
 	rjmp main
 
@@ -242,7 +242,7 @@ symbols:
 	rjmp main
 
 emergency:
-	clear_floor_register floor_register
+	clear_floor_reg floor_register
 	ldi ZL, low(floor_register)
 	ldi ZH, high(floor_register)
 	ldi temp1, 1
@@ -315,6 +315,7 @@ Timer0OVF:
 
 	jmp CHECK_DIR
 
+;	Increment the tempCounter, when tempCounter hits 1 second, add 1 second to secondCounter. When secondCounter has hit 2, increment curr_floor
 INCREMENT_TIMER
 	lds r24, tempCounter
 	lds r25, tempCounter+1
