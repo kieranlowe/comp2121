@@ -60,16 +60,16 @@
 .def cmask = r21
 
 .def pushed = r22
-.def dir = r23					; 0 means down, 1 means up
+.def dir = r23				; 0 means down, 1 means up
 .def curr_floor = r24
-.def next_floor = r25
+.def next_floor = r25			; next floor to move to
 
 .equ number_w = 0x30			; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
 
 .equ PORTLDIR = 0xF0			; 1111 0000
 .equ INITCOLMASK = 0xEF			; 1110 1111, right most column
 .equ INITROWMASK = 0x01			; 0000 0001, scan from top row
-.equ ROWMASK = 0x0F				; 0000 1111, use to obtain input from portL
+.equ ROWMASK = 0x0F			; 0000 1111, use to obtain input from portL
 
 
 RESET:
@@ -110,12 +110,11 @@ RESET:
 ;	Setup pull up register
 	ldi temp1, PORTLDIR				; load temp1 with 1111 0000
 	sts DDRL, temp1					; store into pinL
-	
+
 ;	Setup some global registers
 	ldi pushed, 0
-	ldi curr_floor, 0				; curr_floor is ground floor (0)
-	ldi next_floor, 0				; next_floor by default is the ground floor
-	ldi dir, 1						; starting direction is up
+	ldi dir, 1					; default direction is up
+	ldi curr_floor, 0				; default floor is ground floor (0)
 
 
 ;	Start scanning the keyboard
@@ -141,85 +140,13 @@ MAIN:
 	do_lcd_data ':'
 	do_lcd_data ' '
 	do_lcd_data_alt curr_floor
-	do_lcd_command 0b11000000 	; set address to second line
+	do_lcd_command 0b11000000 		; set address to second line
 
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-;	Set a counter, and two values to record the low and high move points	
-	ldi r26, 0
-	ldi temp1, 0
-	ldi temp2, 10
-
-PRINT_ITERATE:
-	cpi Z, 1
-	breq PRINT_FLOOR
-
-	adiw ZL:ZH, 1
-	inc r26
-	do_lcd_data ' '
-	do_lcd_data ' '
-
-	cpi temp1, 10
-	breq PRINT_END
-	
-	adiw ZL:ZH, 1
-	inc r26
-	cpi r26, 10
-	breq PRINT_END
-	
-	jmp PRINT_ITERATE
-
-;	print the floor that we need to go to
-PRINT_FLOOR:
-	do_lcd_data_alt r26
-
-;	We scan through the floor register. for every value that is checked,
-;	Check if it is greater or less than curr_floor
-;	e.g. 3, 4, 6, 7, 8 selected, curr_floor = 5
-
-;	We find 3 is less than curr_floor
-;	We then check if it is less than or equal to the temp1 value
-;	If so, we set the temp1 value to r26
-
-;	We continue and see 4.
-
-;	We find 4 is less that curr_floor
-;	We then check if it is less than or equal to the temp1 value
-;	If so, we set the temp1 value to r26
-
-;	We continue and see 6.
-
-	cpi r26, curr_floor
-	brgt check_up
-	
-	rjmp check_down
-	
-check_up:
-	cpi r26, temp2
-	brlt change_next_u
-	
-change_next_u:
-	
-	
-	
-
-check_down:
-	
-	adiw ZL:ZH, 1
-	inc r26
-	
-	cpi r26, 10
-	breq PRINT_END
-	
-	jmp PRINT_ITERATE
-	
-PRINT_END:
-;	If something was pressed, wait
 	cpi pushed, 1
 	breq WAIT
 
-;	Start the timer
-	sei
+;	Start the timer when we need to
+;	sei
 	
 ;	Scan the columns
 	rjmp colloop
@@ -236,12 +163,11 @@ WAIT:
 	rjmp WAIT
 READY:
 	ldi pushed, 0
-	jmp main
-
+	jmp colloop
 
 colloop:
 	cpi col, 4
-	breq main					; restart the scan
+	breq MAIN					; restart the scan
 
 	sts PORTL, cmask
 	ldi temp1, 0xFF				; load temp1 with 1111 1111
@@ -307,26 +233,12 @@ convert:
 	add temp1, row
 	add temp1, col
 	inc temp1
-	jmp add_to_register
-
-;	Load the register values from data memory
-add_to_register:
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-find_placement:
-	cpi temp1, 0
-	breq store_register_val
-
-	adiw ZH:ZL, 1
-	subi temp1, 1
-	jmp find_placement
-store_register_val:
-	st Z, temp1
-	rjmp main
+	mov next_floor, temp1
+	rjmp MAIN
 
 ;	Do nothing, return to main
 letters:
-	rjmp main
+	rjmp MAIN
 
 ;	Case for symbols
 symbols:
@@ -339,7 +251,7 @@ symbols:
 	breq zero_case
 
 ;	Hash symbol, ignore it
-	rjmp main
+	rjmp MAIN
 
 emergency:
 	clear_floor_reg floor_register
@@ -349,21 +261,17 @@ emergency:
 	
 	ldi temp1, 1
 	st Z, temp1
-	rjmp main
+	rjmp MAIN
 
 zero_case:
 	ldi temp2, 1
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-	st Z, temp2
 	ldi pushed, 1
-	rjmp main
+	rjmp MAIN
 
 ;	Timer that counts seconds
 Timer0OVF:
 	in temp1, SREG
 	push temp1
-	push temp2
 	push ZH
 	push ZL
 	push YH
@@ -385,7 +293,7 @@ INCREMENT_TIMER:
 	ldi temp1, high(7812)
 	cpc r25, temp1
 	brne NOTSECOND
-	
+
 ;	Otherwise it has been a second, reset tempCounter and increment secondCounter
 	clear_timer tempCounter
 	lds r24, secondCounter
@@ -415,6 +323,7 @@ NOTSECOND:
 	sts tempCounter+1, r24
 	rjmp ENDIF
 
+;	return from timer	
 ENDIF:
 	pop r24 					; Epilogue starts;
 	pop r25 					; Restore all conflict registers from the stack.
@@ -422,14 +331,11 @@ ENDIF:
 	pop YH
 	pop ZL
 	pop ZH
-	pop temp2
 	pop temp1
 	out SREG, temp
 	reti
 
 .dseg
-floor_register:
-	.byte 10
 tempCounter:
 	.byte 2
 secondCounter:
