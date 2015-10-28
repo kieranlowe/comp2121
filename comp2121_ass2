@@ -63,6 +63,7 @@
 .def dir = r23				; 0 means down, 1 means up
 .def curr_floor = r24
 .def next_floor = r25			; next floor to move to
+.def ele_status = r26
 
 .equ number_w = 0x30			; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
 
@@ -115,7 +116,7 @@ RESET:
 	ldi pushed, 0
 	ldi dir, 1					; default direction is up
 	ldi curr_floor, 0				; default floor is ground floor (0)
-
+	ldi ele_status, 0				; 0 = closed, 1 = opening doors, 2 = idle open, 3 = closing doors
 
 ;	Start scanning the keyboard
 MAIN:
@@ -279,8 +280,8 @@ Timer0OVF:
 	push r25
 	push r24
 
-;	Increment the tempCounter, when tempCounter hits 1 second, add 1 second to secondCounter. 
-;	When secondCounter has hit 2, increment curr_floor
+;	Increment the tempCounter, when tempCounter hits 1 second, add 1 second to secondCounter.
+;	Clear the tempCounter when it hits 1 second
 INCREMENT_TIMER:
 ;	increment tempCounter
 	lds r24, tempCounter
@@ -300,29 +301,64 @@ INCREMENT_TIMER:
 	inc r24
 	sts secondCounter, r24
 	
-	cpi r24, 2
-	breq CHANGE_FLOOR
-	
-	rjmp ENDIF
+	cpi ele_status, 1
+	breq opening_doors
 
-CHANGE_FLOOR:
+	cpi ele_status, 2
+	breq idle_state
+	
+	cpi ele_status, 3
+	breq closing_doors
+
+change_floor:
 	cpi dir, 1
-	breq CHANGE_FLOOR_U
-	rjmp CHANGE_FLOOR_D
-CHANGE_FLOOR_U:
+	breq change_floor_u
+	rjmp change_floor_d
+change_floor_u:
 	inc curr_floor
 	clear_sec_timer secondCounter
 	rjmp ENDIF
-CHANGE_FLOOR_D:
+change_floor_d:
 	dec curr_floor
 	clear_sec_timer secondCounter
 	rjmp ENDIF
-	
+
 NOTSECOND:
 	sts tempCounter, r24
 	sts tempCounter+1, r24
+	rjmp ENDIF	
+
+;	If opening doors, check if it has been one second
+;	If so, go to idle state (leave door open for three seconds)
+opening_doors:
+	cpi r24, 1
+	breq to_idle
+	rjmp ENDIF
+	
+to_idle:
+	ldi ele_status = 2
+	clear_sec_timer secondCounter
 	rjmp ENDIF
 
+idle_state:
+	cpi r24, 3
+	breq to_close
+	
+to_close:
+	ldi ele_status = 3
+	clear_sec_timer secoundCounter
+	rjmp ENDIF
+
+closing_doors:
+	cpi r24, 1
+	breq door_closed
+	rjmp ENDIF
+	
+door_closed:
+	ldi ele_status, 0
+	clear_sec_timer secondTimer
+	rjmp ENDIF
+	
 ;	return from timer	
 ENDIF:
 	pop r24 					; Epilogue starts;
