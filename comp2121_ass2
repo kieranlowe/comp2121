@@ -359,7 +359,7 @@ zero_case:
 	ldi pushed, 1
 	rjmp main
 
-;	Timer that counts two seconds
+;	Timer that counts seconds
 Timer0OVF:
 	in temp1, SREG
 	push temp1
@@ -371,61 +371,8 @@ Timer0OVF:
 	push r25
 	push r24
 
-;	Check what direction to go depending on what dir is defined
-CHECK_DIR:
-	cpi dir, 1
-	breq ITERATE_UP
-
-	jmp ITERATE_DOWN
-
-;	Lift is moving up, scan floors from the bottom.
-;	Check if the floor register is checked. If it is, we check if we are on that floor at the moment. 
-;	If so, then we wait one second instead of two seconds for the door.
-
-ITERATE_UP:
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-	ldi temp1, 0
-CHECK_FLOOR_U:
-	cpi Z, 1
-	breq CHECK_IF_U
-
-	adiw ZL:ZH, 1
-	inc temp1
-	jmp CHECK_FLOOR_U
-
-;	If you are currently on this floor, then wait for one second instead of the usual two. 
-;	If push buttom is pushed, or wait period is over, we change the value of the current thingy
-CHECK_IF_U:
-	cpi temp1, curr_floor
-	breq stop_here
-	
-	do_something_else
-	
-stop_here:
-	...
-
-ITERATE_DOWN:
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-	adiw ZL:ZH, 10
-	ldi temp1, 10
-CHECK_FLOOR_D:
-	cpi Z, 1
-	breq CHECK_IF_D
-	
-	subi ZL:ZH, 1
-	dec temp1
-	jmp CHECK_FLOOR_D
-	
-CHECK_IF_D:
-	cpi temp1, curr_floor
-	brlt do_something_d
-	
-	do_something_else
-	
-
-;	Increment the tempCounter, when tempCounter hits 1 second, add 1 second to secondCounter. When secondCounter has hit 2, increment curr_floor
+;	Increment the tempCounter, when tempCounter hits 1 second, add 1 second to secondCounter. 
+;	When secondCounter has hit 2, increment curr_floor
 INCREMENT_TIMER:
 ;	increment tempCounter
 	lds r24, tempCounter
@@ -439,8 +386,7 @@ INCREMENT_TIMER:
 	cpc r25, temp1
 	brne NOTSECOND
 	
-;	Otherwise it has been a second, reset tempCounter
-;	and increment secondCounter
+;	Otherwise it has been a second, reset tempCounter and increment secondCounter
 	clear_timer tempCounter
 	lds r24, secondCounter
 	inc r24
