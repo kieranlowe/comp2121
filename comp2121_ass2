@@ -86,13 +86,13 @@ RESET:
 	out PORTF, temp2
 	out PORTA, temp2
 
-	do_lcd_command 0b00111000 	; 2x5x7
+	do_lcd_command 0b00111000 		; 2x5x7
 	rcall sleep_5ms
-	do_lcd_command 0b00111000 	; 2x5x7
+	do_lcd_command 0b00111000 		; 2x5x7
 	rcall sleep_1ms
-	do_lcd_command 0b00111000 	; 2x5x7
-	do_lcd_command 0b00111000 	; 2x5x7
-	do_lcd_command 0b00001000 	; display off, cursor off, bar off, blink off
+	do_lcd_command 0b00111000 		; 2x5x7
+	do_lcd_command 0b00111000 		; 2x5x7
+	do_lcd_command 0b00001000 		; display off, cursor off, bar off, blink off
 	do_lcd_command 0b00000001 		; clear display
 	do_lcd_command 0b00000110 		; increment, no display shift
 	do_lcd_command 0b00001100 		; display on, cursor on, no blink
@@ -114,6 +114,7 @@ RESET:
 ;	Setup some global registers
 	ldi pushed, 0
 	ldi curr_floor, 0				; curr_floor is ground floor (0)
+	ldi next_floor, 0				; next_floor by default is the ground floor
 	ldi dir, 1						; starting direction is up
 
 
@@ -144,13 +145,17 @@ MAIN:
 
 	ldi ZL, low(floor_register)
 	ldi ZH, high(floor_register)
+;	Set a counter, and two values to record the low and high move points	
+	ldi r26, 0
 	ldi temp1, 0
+	ldi temp2, 10
+
 PRINT_ITERATE:
 	cpi Z, 1
 	breq PRINT_FLOOR
 
 	adiw ZL:ZH, 1
-	inc temp1
+	inc r26
 	do_lcd_data ' '
 	do_lcd_data ' '
 
@@ -158,12 +163,56 @@ PRINT_ITERATE:
 	breq PRINT_END
 	
 	adiw ZL:ZH, 1
-	inc temp1
-	cpi temp1, 10
+	inc r26
+	cpi r26, 10
 	breq PRINT_END
 	
 	jmp PRINT_ITERATE
 
+;	print the floor that we need to go to
+PRINT_FLOOR:
+	do_lcd_data_alt r26
+
+;	We scan through the floor register. for every value that is checked,
+;	Check if it is greater or less than curr_floor
+;	e.g. 3, 4, 6, 7, 8 selected, curr_floor = 5
+
+;	We find 3 is less than curr_floor
+;	We then check if it is less than or equal to the temp1 value
+;	If so, we set the temp1 value to r26
+
+;	We continue and see 4.
+
+;	We find 4 is less that curr_floor
+;	We then check if it is less than or equal to the temp1 value
+;	If so, we set the temp1 value to r26
+
+;	We continue and see 6.
+
+	cpi r26, curr_floor
+	brgt check_up
+	
+	rjmp check_down
+	
+check_up:
+	cpi r26, temp2
+	brlt change_next_u
+	
+change_next_u:
+	
+	
+	
+
+check_down:
+	
+	adiw ZL:ZH, 1
+	inc r26
+	
+	cpi r26, 10
+	breq PRINT_END
+	
+	jmp PRINT_ITERATE
+	
 PRINT_END:
 ;	If something was pressed, wait
 	cpi pushed, 1
@@ -330,7 +379,8 @@ CHECK_DIR:
 	jmp ITERATE_DOWN
 
 ;	Lift is moving up, scan floors from the bottom.
-;	Check if the floor register is checked. If it is, we check if we are on that floor at the moment. If so, then we wait one second instead of two seconds for the door.
+;	Check if the floor register is checked. If it is, we check if we are on that floor at the moment. 
+;	If so, then we wait one second instead of two seconds for the door.
 
 ITERATE_UP:
 	ldi ZL, low(floor_register)
@@ -344,7 +394,8 @@ CHECK_FLOOR_U:
 	inc temp1
 	jmp CHECK_FLOOR_U
 
-;	If you are currently on this floor, then wait for one second instead of the usual two. If push buttom is pushed, or wait period is over, we change the value of the current thingy
+;	If you are currently on this floor, then wait for one second instead of the usual two. 
+;	If push buttom is pushed, or wait period is over, we change the value of the current thingy
 CHECK_IF_U:
 	cpi temp1, curr_floor
 	breq stop_here
