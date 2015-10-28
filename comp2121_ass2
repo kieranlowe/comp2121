@@ -14,6 +14,8 @@
 
 .macro do_lcd_data_alt
 	mov r16, @0
+	ldi temp2, number_w
+	add r16, temp2
 	rcall lcd_data
 	rcall lcd_wait
 .endmacro
@@ -99,12 +101,12 @@ RESET:
 	do_lcd_command 0b00001100 		; display on, cursor on, no blink
 
 ;	Setup timer and enable interrupt (do not activate yet)
-	clear TempCounter  				; Initialize the temporary counter to 0
-	clear SecondCounter  			; Initialize the second counter to 0
+	clear tempCounter  			; Initialize the temporary counter to 0
+	clear secondCounter  			; Initialize the second counter to 0
 	ldi temp1, 0b00000000
 	out TCCR0A, temp
 	ldi temp1, 0b00000010
-	out TCCR0B, temp 				; Prescaling value=8
+	out TCCR0B, temp 			; Prescaling value=8
 	ldi temp1, 1<<TOIE0  			; = 128 microseconds
 	sts TIMSK0, temp1 				; T/C0 interrupt enable
 
