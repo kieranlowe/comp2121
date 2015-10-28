@@ -63,9 +63,9 @@
 
 .def pushed = r22
 .def dir = r23				; 0 means down, 1 means up
-.def curr_floor = r24
+.def curr_floor = r24			; current floor of elevator
 .def next_floor = r25			; next floor to move to
-.def ele_status = r26
+.def ele_status = r26			; 0 = closed, 1 = opening doors, 2 = idle open, 3 = closing doors
 
 .equ number_w = 0x30			; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
 
@@ -89,28 +89,37 @@ RESET:
 	out PORTF, temp2
 	out PORTA, temp2
 
-	do_lcd_command 0b00111000 		; 2x5x7
+	do_lcd_command 0b00111000 			; 2x5x7
 	rcall sleep_5ms
-	do_lcd_command 0b00111000 		; 2x5x7
+	do_lcd_command 0b00111000 			; 2x5x7
 	rcall sleep_1ms
-	do_lcd_command 0b00111000 		; 2x5x7
-	do_lcd_command 0b00111000 		; 2x5x7
-	do_lcd_command 0b00001000 		; display off, cursor off, bar off, blink off
-	do_lcd_command 0b00000001 		; clear display
-	do_lcd_command 0b00000110 		; increment, no display shift
-	do_lcd_command 0b00001100 		; display on, cursor on, no blink
+	do_lcd_command 0b00111000 			; 2x5x7
+	do_lcd_command 0b00111000 			; 2x5x7
+	do_lcd_command 0b00001000 			; display off, cursor off, bar off, blink off
+	do_lcd_command 0b00000001 			; clear display
+	do_lcd_command 0b00000110 			; increment, no display shift
+	do_lcd_command 0b00001100 			; display on, cursor on, no blink
 
 ;	Setup timer and enable interrupt (do not activate yet)
-	clear tempCounter  			; Initialize the temporary counter to 0
-	clear secondCounter  			; Initialize the second counter to 0
+	clear tempCounter  				; Initialize the temporary counter to 0
+	clear secondCounter  				; Initialize the second counter to 0
 	ldi temp1, 0b00000000
 	out TCCR0A, temp
 	ldi temp1, 0b00000010
-	out TCCR0B, temp 			; Prescaling value=8
-	ldi temp1, 1<<TOIE0  			; = 128 microseconds
+	out TCCR0B, temp 				; Prescaling value=8
+	ldi temp1, 1<<TOIE0  				; = 128 microseconds
 	sts TIMSK0, temp1 				; T/C0 interrupt enable
 
-;	Setup pull up register
+;;;;;	Experimental!!
+;	Setup push button for door closing action
+	ldi temp1, (2<<ISC00)
+	sts EICRA, temp1
+	
+	in temp1, EIMSK
+	ori temp1, (1 <<INT0)
+	out EIMSK, temp1
+;;;;;	Experimental!!
+
 	ldi temp1, PORTLDIR				; load temp1 with 1111 0000
 	sts DDRL, temp1					; store into pinL
 
@@ -118,7 +127,10 @@ RESET:
 	ldi pushed, 0
 	ldi dir, 1					; default direction is up
 	ldi curr_floor, 0				; default floor is ground floor (0)
-	ldi ele_status, 0				; 0 = closed, 1 = opening doors, 2 = idle open, 3 = closing doors
+	ldi ele_status, 0
+
+;	Activate interrupts
+	sei
 
 ;	Start scanning the keyboard
 MAIN:
@@ -147,9 +159,6 @@ MAIN:
 
 	cpi pushed, 1
 	breq WAIT
-
-;	Start the timer when we need to
-;	sei
 	
 ;	Scan the columns
 	rjmp colloop
@@ -373,6 +382,31 @@ ENDIF:
 	out SREG, temp
 	reti
 
+;;;;;;	Experimental!!
+;	Interrupt triggered by push button
+;	Changes elevator door from waiting while open to closing
+EXT_INT0:
+	push temp1
+	in temp1, SREG
+	push temp1
+	
+	cpi ele_status, 2
+	breq skip_idle
+	
+	jmp EXIT_THIS
+
+skip_idle:
+	ldi ele_status, 3
+	rjmp EXIT_THIS
+
+EXIT_THIS:
+	pop temp1
+	out SREG, temp1
+	pop temp1
+	reti
+;;;;;;	Experimental!!
+
+
 .dseg
 tempCounter:
 	.byte 2
@@ -382,3 +416,6 @@ secondCounter:
 .cseg
 .org OVF0addr
 	jmp Timer0OVF
+	
+.org INT0addr
+	jmp EXT_INT0
