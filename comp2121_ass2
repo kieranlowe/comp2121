@@ -62,21 +62,21 @@
 .def cmask = r21
 
 .def pushed = r22
-.def dir = r23				; 0 means down, 1 means up
-.def curr_floor = r24			; current floor of elevator
-.def next_floor = r25			; next floor to move to
-.def ele_status = r26			; 0 = closed, 1 = opening doors, 2 = idle open, 3 = closing doors
+.def dir = r23					; 0 means down, 1 means up
+.def curr_floor = r24				; current floor of elevator
+.def next_floor = r25				; next floor to move to
+.def ele_status = r26				; 0 = closed, 1 = opening doors, 2 = idle open, 3 = closing doors
 
-.equ number_w = 0x30			; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
+.equ number_w = 0x30				; binary for 0011, used to write numbers to lcd (i.e. 0011 0001 is 1)
 
-.equ PORTLDIR = 0xF0			; 1111 0000
-.equ INITCOLMASK = 0xEF			; 1110 1111, right most column
-.equ INITROWMASK = 0x01			; 0000 0001, scan from top row
-.equ ROWMASK = 0x0F			; 0000 1111, use to obtain input from portL
+.equ PORTLDIR = 0xF0				; 1111 0000
+.equ INITCOLMASK = 0xEF				; 1110 1111, scan from right most column
+.equ INITROWMASK = 0x01				; 0000 0001, and top row
+.equ ROWMASK = 0x0F				; 0000 1111, use to obtain input from portL
 
 
 RESET:
-	ldi temp1, low(RAMEND)		; initialise a stack
+	ldi temp1, low(RAMEND)			; initialise a stack
 	out SPL, temp1
 	ldi temp1, high(RAMEND)
 	out SPH, temp1
@@ -127,18 +127,18 @@ RESET:
 	ldi pushed, 0
 	ldi dir, 1					; default direction is up
 	ldi curr_floor, 0				; default floor is ground floor (0)
-	ldi ele_status, 0
+	ldi ele_status, 0				; start elevator closed
 
 ;	Activate interrupts
 	sei
 
 ;	Start scanning the keyboard
 MAIN:
-	ldi cmask, INITCOLMASK			; 1110 1111
+	ldi cmask, INITCOLMASK				; 1110 1111
 	clr col
 
-	;	Print to the lcd.	
-	do_lcd_command 0b00000001 		; clear display
+	;	Print current floor	
+	do_lcd_command 0b00000001 			; clear display
 	do_lcd_data 'C'
 	do_lcd_data 'u'
 	do_lcd_data 'r'
@@ -155,7 +155,6 @@ MAIN:
 	do_lcd_data ':'
 	do_lcd_data ' '
 	do_lcd_data_alt curr_floor
-	do_lcd_command 0b11000000 		; set address to second line
 
 	cpi pushed, 1
 	breq WAIT
@@ -168,9 +167,9 @@ WAIT:
 	sts PORTL, temp2
 	nop
 	nop
-	lds temp1, PINL				; Obtain value from the keypad
-	andi temp1, ROWMASK			; Isolate bottom 4 bits
-	cpi temp1, 0xF				; check if row is high (i.e. something being pressed)
+	lds temp1, PINL					; Obtain value from the keypad
+	andi temp1, ROWMASK				; Isolate bottom 4 bits
+	cpi temp1, 0xF					; check if row is high (i.e. something being pressed)
 	breq READY
 	rjmp WAIT
 READY:
@@ -182,7 +181,7 @@ colloop:
 	breq MAIN					; restart the scan
 
 	sts PORTL, cmask
-	ldi temp1, 0xFF				; load temp1 with 1111 1111
+	ldi temp1, 0xFF					; load temp1 with 1111 1111
 	
 	jmp delay
 
@@ -191,9 +190,9 @@ delay:
 	dec temp1
 	brne delay
 
-	lds temp1, PINL				; read port L
+	lds temp1, PINL					; read port L
 	andi temp1, ROWMASK
-	cpi temp1, 0xF				; check if row is high (i.e. nothing pressed)
+	cpi temp1, 0xF					; check if row is high (i.e. nothing pressed)
 	breq nextcol
 
 	ldi temp2, 0xFF
@@ -207,9 +206,9 @@ delay2:							; wait?
 	lds temp1, PINL
 	andi temp1, ROWMASK
 	cpi temp1, 0xF
-	breq nextcol				; check if row is high (i.e. nothing pressed)
+	breq nextcol					; check if row is high (i.e. nothing pressed)
 
-	ldi rmask, INITROWMASK  	; 0000 0001
+	ldi rmask, INITROWMASK  			; 0000 0001
 	clr row
 
 rowloop:
@@ -217,8 +216,8 @@ rowloop:
 	breq nextcol
 
 	mov temp2, temp1
-	and temp2, rmask			; check if this row was pressed
-	breq convert				; convert if so
+	and temp2, rmask				; check if this row was pressed
+	breq convert					; convert if so
 
 	inc row						; next row
 	lsl rmask					; shift rmask 0000 0001 -> 0000 0010
@@ -245,7 +244,7 @@ convert:
 	add temp1, row
 	add temp1, col
 	inc temp1
-	mov next_floor, temp1
+	mov next_floor, temp1				; moves the most recent pressed value to next_floor
 	rjmp MAIN
 
 ;	Do nothing, return to main
@@ -266,9 +265,6 @@ symbols:
 	rjmp MAIN
 
 emergency:
-	clear_floor_reg floor_register
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
 	ldi pushed, 1
 	
 	ldi temp1, 1
@@ -281,6 +277,7 @@ zero_case:
 	rjmp MAIN
 
 ;	Timer that counts seconds
+;	NEEDS TO KNOW WHEN TO UPDATE CURR_FLOOR AND WHEN TO COUNT
 Timer0OVF:
 	in temp1, SREG
 	push temp1
