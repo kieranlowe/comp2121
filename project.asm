@@ -1,4 +1,3 @@
-
 .include "m2560def.inc"
 
 .macro do_lcd_command
@@ -56,6 +55,69 @@
 	st Y, temp1
 .endmacro
 
+
+
+;	Don't execute these instructions unless they are called
+
+.equ LCD_RS = 7
+.equ LCD_E = 6
+.equ LCD_RW = 5
+.equ LCD_BE = 4
+
+.macro lcd_set
+	sbi PORTA, @0
+.endmacro
+.macro lcd_clr
+	cbi PORTA, @0
+.endmacro
+
+;
+; Send a command to the LCD (r16)
+;
+
+lcd_command:
+	out PORTF, r16
+	rcall sleep_1ms
+	lcd_set LCD_E
+	rcall sleep_1ms
+	lcd_clr LCD_E
+	rcall sleep_1ms
+	ret
+
+lcd_data:
+	out PORTF, r16
+	lcd_set LCD_RS
+	rcall sleep_1ms
+	lcd_set LCD_E
+	rcall sleep_1ms
+	lcd_clr LCD_E
+	rcall sleep_1ms
+	lcd_clr LCD_RS
+	ret
+
+lcd_wait:
+	push r16
+	clr r16
+	out DDRF, r16
+	out PORTF, r16
+	lcd_set LCD_RW
+lcd_wait_loop:
+	rcall sleep_1ms
+	lcd_set LCD_E
+	rcall sleep_1ms
+	in r16, PINF
+	lcd_clr LCD_E
+	sbrc r16, 7
+	rjmp lcd_wait_loop
+	lcd_clr LCD_RW
+	ser r16
+	out DDRF, r16
+	pop r16
+	ret
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; End Macros ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 .def temp1 = r16
 .def temp2 = r17
 
@@ -77,7 +139,11 @@
 .equ INITROWMASK = 0x01				; 0000 0001, and top row
 .equ ROWMASK = 0x0F					; 0000 1111, use to obtain input from portL
 
-	
+.dseg
+floor_register: .byte 10
+tempCounter: .byte 2
+secondCounter: .byte 1
+		
 .cseg
 .org OVF0addr
 	jmp Timer0OVF
@@ -555,13 +621,4 @@ EXIT_THIS:
 	reti
 ;;;;;;	Experimental!!
 	
-
-
-.dseg
-floor_register:
-	.byte 10
-tempCounter:
-	.byte 2
-secondCounter:
-	.byte 1
 
