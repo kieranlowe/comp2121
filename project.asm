@@ -203,13 +203,13 @@ RESET:
 	do_lcd_command 0b00001100 		; display on, cursor on, no blink
 
 ;	Setup timer and enable interrupt
-	clear_timer tempCounter  				; Initialize the temporary counter to 0
+	clear_timer tempCounter  		; Initialize the temporary counter to 0
 	clear secondCounter  			; Initialize the second counter to 0
 	ldi temp1, 0b00000000
 	out TCCR0A, temp
 	ldi temp1, 0b00000010
 	out TCCR0B, temp 				; Prescaling value=8
-	ldi temp1, 1<<TOIE0  				; = 128 microseconds
+	ldi temp1, 1<<TOIE0  			; = 128 microseconds
 	sts TIMSK0, temp1 				; T/C0 interrupt enable
 
 ;	Setup push button for door closing action
@@ -232,7 +232,8 @@ RESET:
 	ldi curr_floor, 0				; curr_floor is ground floor (0)
 	ldi next_floor, 0				; next_floor by default is the ground floor
 	ldi ele_status, 0				; start elevator idle
-	
+
+	sei								; activate timers/interrupts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -347,35 +348,20 @@ SEARCH_END:
 	cpi col, 1
 	breq change_next_floor_u
 	
-	jmp ACTIVATE_TIMERS
+	jmp SCAN
 
 change_next_floor_d:
 	mov next_floor, temp2
 	ldi dir, 0
 	ldi ele_status, 1
-	jmp ACTIVATE_TIMERS
+	jmp SCAN
 
 change_next_floor_u:
 	mov next_floor, temp1
 	ldi dir, 1
 	ldi ele_status, 1
-	jmp ACTIVATE_TIMERS
+	jmp SCAN
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-ACTIVATE_TIMERS:
-	cpi ele_status, 0
-	brne RUN_TIMER
-	
-	rjmp SCAN
-
-RUN_TIMER:
-	sei
-	rjmp SCAN
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -558,28 +544,34 @@ Timer0OVF:
 	push ZL
 	push YH
 	push YL
-	push r25
-	push r24
+	push r18
+	push r19
+
+;	push r25
+;	push r24
 
 ;	Increment tempCounter
 INCREMENT_TIMER:
+	cpi ele_status, 0
+	breq elevator_idle
+
 ;	increment tempCounter
-	lds r24, tempCounter
-	lds r25, tempCounter+1
-	adiw r25:r24, 1
+	lds r18, tempCounter
+	lds r19, tempCounter+1
+	adiw r19:r18, 1
 
 ;	If it has been one second, inc secondCounter, clear tempCounter, store value of secondCounter
 ;	Otherwise store tempCounter value.
 ;	Do some action depending on what secondCounter value is
-	cpi r24, low(7812)
+	cpi r18, low(7812)
 	ldi temp1, high(7812)
-	cpc r25, temp1
+	cpc r19, temp1
 	brne NOTSECOND
-	
+
 	clear_timer tempCounter
-	lds r24, secondCounter
-	inc r24
-	sts secondCounter, r24
+	lds r18, secondCounter
+	inc r18
+	sts secondCounter, r18
 
 ;	If elevator is opening doors
 	cpi ele_status, 2
@@ -597,13 +589,13 @@ INCREMENT_TIMER:
 	cpi ele_status, 1
 	breq moving_elevator
 
-;	Theoretically, should never reach this point	
+elevator_idle:
 	jmp ENDIF
-
+	
 ;	store tempCounter and end the timer
 NOTSECOND:
-	sts tempCounter, r24
-	sts tempCounter+1, r25
+	sts tempCounter, r18
+	sts tempCounter+1, r19
 	rjmp ENDIF		
 	
 ;	If opening doors, check if it has been 1 second
@@ -689,8 +681,10 @@ drop_me:
 	
 ;	return from timer	
 ENDIF:
-	pop r24 					; Epilogue starts;
-	pop r25 					; Restore all conflict registers from the stack.
+;	pop r24 					; Epilogue starts;
+;	pop r25 					; Restore all conflict registers from the stack.
+	pop r19
+	pop r18
 	pop YL
 	pop YH
 	pop ZL
@@ -718,6 +712,8 @@ EXT_INT0:
 
 skip_idle:
 	ldi ele_status, 4
+	clear secondCounter
+	clear_timer tempCounter
 	rjmp EXIT_THIS
 
 EXIT_THIS:
@@ -726,4 +722,3 @@ EXIT_THIS:
 	pop temp1
 	reti
 	
-
