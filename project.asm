@@ -1,3 +1,4 @@
+
 .include "m2560def.inc"
 
 .macro do_lcd_command
@@ -14,6 +15,8 @@
 
 .macro do_lcd_data_alt
 	mov r16, @0
+	ldi temp2, number_w
+	add r16, temp2
 	rcall lcd_data
 	rcall lcd_wait
 .endmacro
@@ -36,18 +39,20 @@
 	st Y, temp1
 .endmacro
 
+;	clears one byte address
+.macro clear
+	ldi YL, low(@0)
+	ldi YH, high(@0)
+	clr temp1
+	st Y, temp1
+.endmacro
+
+;	clears two byte tempCounter
 .macro clear_timer
 	ldi YL, low(@0) ; load the memory address to Y
 	ldi YH, high(@0)
 	clr temp1
 	st Y+, temp1  ; clear the two bytes at @0 in SRAM
-	st Y, temp1
-.endmacro
-
-.macro clear_sec_timer
-	ldi YL, low(@0)
-	ldi YH, high(@0)
-	clr temp1
 	st Y, temp1
 .endmacro
 
@@ -60,20 +65,25 @@
 .def cmask = r21
 
 .def pushed = r22
-.def dir = r23					; 0 means down, 1 means up
-.def curr_floor = r24
-.def next_floor = r25
+.def dir = r23						; 0 means down, 1 means up
+.def curr_floor = r24				; current floor of elevator
+.def next_floor = r25				; next floor to move to
+.def ele_status = r26				; 0 = idle, 1 = closed, 2 = opening doors, 3 = idle open, 4 = closing doors
 
-.equ number_w = 0x30			; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
+.equ number_w = 0x30				; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
 
-.equ PORTLDIR = 0xF0			; 1111 0000
-.equ INITCOLMASK = 0xEF			; 1110 1111, right most column
-.equ INITROWMASK = 0x01			; 0000 0001, scan from top row
-.equ ROWMASK = 0x0F				; 0000 1111, use to obtain input from portL
+.equ PORTLDIR = 0xF0				; 1111 0000
+.equ INITCOLMASK = 0xEF				; 1110 1111, scan from right most column
+.equ INITROWMASK = 0x01				; 0000 0001, and top row
+.equ ROWMASK = 0x0F					; 0000 1111, use to obtain input from portL
 
+	
+.cseg
+.org OVF0addr
+	jmp Timer0OVF
 
 RESET:
-	ldi temp1, low(RAMEND)		; initialise a stack
+	ldi temp1, low(RAMEND)			; initialise a stack
 	out SPL, temp1
 	ldi temp1, high(RAMEND)
 	out SPH, temp1
@@ -97,31 +107,44 @@ RESET:
 	do_lcd_command 0b00000110 		; increment, no display shift
 	do_lcd_command 0b00001100 		; display on, cursor on, no blink
 
-;	Setup timer and enable interrupt (do not activate yet)
-	clear TempCounter  				; Initialize the temporary counter to 0
-	clear SecondCounter  			; Initialize the second counter to 0
+;	Setup timer and enable interrupt
+	clear tempCounter  				; Initialize the temporary counter to 0
+	clear secondCounter  			; Initialize the second counter to 0
 	ldi temp1, 0b00000000
 	out TCCR0A, temp
 	ldi temp1, 0b00000010
 	out TCCR0B, temp 				; Prescaling value=8
-	ldi temp1, 1<<TOIE0  			; = 128 microseconds
+	ldi temp1, 1<<TOIE0  				; = 128 microseconds
 	sts TIMSK0, temp1 				; T/C0 interrupt enable
 
+;;;;;	Experimental!!
+;	Setup push button for door closing action
+	ldi temp1, (2<<ISC00)
+	sts EICRA, temp1
+	
+	in temp1, EIMSK
+	ori temp1, (1 <<INT0)
+	out EIMSK, temp1
+;;;;;	Experimental!!
+	
 ;	Setup pull up register
 	ldi temp1, PORTLDIR				; load temp1 with 1111 0000
 	sts DDRL, temp1					; store into pinL
 	
 ;	Setup some global registers
 	ldi pushed, 0
+	ldi dir, 1
 	ldi curr_floor, 0				; curr_floor is ground floor (0)
 	ldi next_floor, 0				; next_floor by default is the ground floor
-	ldi dir, 1						; starting direction is up
-
-
+	ldi ele_status, 0				; start elevator idle
+	
+	
 ;	Start scanning the keyboard
 MAIN:
-	ldi cmask, INITCOLMASK			; 1110 1111
-	clr col
+
+;	Wait until something isn't being held
+	cpi pushed, 1
+	breq WAIT
 
 	;	Print to the lcd.	
 	do_lcd_command 0b00000001 		; clear display
@@ -141,107 +164,134 @@ MAIN:
 	do_lcd_data ':'
 	do_lcd_data ' '
 	do_lcd_data_alt curr_floor
-	do_lcd_command 0b11000000 	; set address to second line
 
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-;	Set a counter, and two values to record the low and high move points	
-	ldi r26, 0
-	ldi temp1, 0
-	ldi temp2, 10
+;	if elevator is idle or moving, check what the next floor should be
+	cpi ele_status, 2
+	brlo FIND_NEXT_FLOOR
+	
+	rjmp SCAN
 
-PRINT_ITERATE:
-	cpi Z, 1
-	breq PRINT_FLOOR
-
-	adiw ZL:ZH, 1
-	inc r26
-	do_lcd_data ' '
-	do_lcd_data ' '
-
-	cpi temp1, 10
-	breq PRINT_END
-	
-	adiw ZL:ZH, 1
-	inc r26
-	cpi r26, 10
-	breq PRINT_END
-	
-	jmp PRINT_ITERATE
-
-;	print the floor that we need to go to
-PRINT_FLOOR:
-	do_lcd_data_alt r26
-
-;	We scan through the floor register. for every value that is checked,
-;	Check if it is greater or less than curr_floor
-;	e.g. 3, 4, 6, 7, 8 selected, curr_floor = 5
-
-;	We find 3 is less than curr_floor
-;	We then check if it is less than or equal to the temp1 value
-;	If so, we set the temp1 value to r26
-
-;	We continue and see 4.
-
-;	We find 4 is less that curr_floor
-;	We then check if it is less than or equal to the temp1 value
-;	If so, we set the temp1 value to r26
-
-;	We continue and see 6.
-
-	cpi r26, curr_floor
-	brgt check_up
-	
-	rjmp check_down
-	
-check_up:
-	cpi r26, temp2
-	brlt change_next_u
-	
-change_next_u:
-	
-	
-	
-
-check_down:
-	
-	adiw ZL:ZH, 1
-	inc r26
-	
-	cpi r26, 10
-	breq PRINT_END
-	
-	jmp PRINT_ITERATE
-	
-PRINT_END:
-;	If something was pressed, wait
-	cpi pushed, 1
-	breq WAIT
-
-;	Start the timer
-	sei
-	
-;	Scan the columns
-	rjmp colloop
-	
 ;	Wait until button isnt being held
+;	Prevents multiple input
 WAIT:
 	sts PORTL, temp2
-	nop
-	nop
-	lds temp1, PINL				; Obtain value from the keypad
-	andi temp1, ROWMASK			; Isolate bottom 4 bits
-	cpi temp1, 0xF				; check if row is high (i.e. something being pressed)
+	lds temp1, PINL					; Obtain value from the keypad
+	andi temp1, ROWMASK				; Isolate bottom 4 bits
+	cpi temp1, 0xF					; check if row is high (i.e. nothing being pressed)
 	breq READY
 	rjmp WAIT
 READY:
 	ldi pushed, 0
-	jmp main
+	jmp MAIN
+	
+;	Find the floor we need to go to
+FIND_NEXT_FLOOR:
+	ldi r27, 0							; store the floor we're at
+	ldi temp1, 10
+	ldi temp2, 0
+	ldi col, 2							; borrow this register for a bit
 
+CHECK_FLOOR:
+	cpi Z, 1
+	breq floor_marked
+	
+	jmp TO_NEXT_FLOOR
+	
+floor_marked:
+	cpi dir, 1
+	breq check_up_a
+	
+	jmp check_down_a
+	
+check_up_a:
+	cp r27, temp1
+	brlt check_up_b
+	
+	jmp TO_NEXT_FLOOR
+	
+check_up_b:
+	cp r27, curr_floor
+	brge change_temp1
+	
+	cpi col, 1
+	brne check_down_a
+	
+	jmp TO_NEXT_FLOOR
 
+check_down_a:
+	cp r27, temp2
+	brge check_down_b
+	
+	jmp TO_NEXT_FLOOR	
+	
+check_down_b:
+	cp r27, curr_floor
+	brlo change_temp2
+	
+	cpi col, 0
+	brne check_up_a
+	
+	jmp TO_NEXT_FLOOR
+	
+change_temp1:
+	mov temp1, r27
+	ldi col, 1
+	jmp TO_NEXT_FLOOR
+	
+change_temp2:
+	mov temp2, r27
+	ldi col, 0
+	jmp TO_NEXT_FLOOR
+
+TO_NEXT_FLOOR:
+	inc r27
+	adiw ZH:ZL, 1
+	cpi r27, 10
+	breq SEARCH_END
+	
+	jmp CHECK_FLOOR
+		
+SEARCH_END:
+	cpi col, 0
+	breq change_next_floor_d
+	
+	cpi col, 1
+	breq change_next_floor_u
+	
+	jmp SCAN
+
+change_next_floor_d:
+	mov temp2, next_floor
+	ldi dir, 0
+	ldi ele_status, 1
+	jmp SCAN
+	
+change_next_floor_u:
+	mov temp1, next_floor
+	ldi dir, 1
+	ldi ele_status, 1
+	jmp SCAN
+
+	
+;	Scan the keypad for input
+SCAN:
+	cpi ele_status, 0
+	brne RUN_TIMER	
+
+	ldi cmask, INITCOLMASK			; 1110 1111
+	clr col
+
+;	Scan the columns
+	rjmp colloop
+
+;	Activate the timer and then return to main
+RUN_TIMER:
+	sei
+	rjmp MAIN
+	
 colloop:
 	cpi col, 4
-	breq main					; restart the scan
+	breq MAIN					; restart the scan
 
 	sts PORTL, cmask
 	ldi temp1, 0xFF				; load temp1 with 1111 1111
@@ -307,9 +357,16 @@ convert:
 	add temp1, row
 	add temp1, col
 	inc temp1
-	jmp add_to_register
+	jmp add_to_register			
 
-;	Load the register values from data memory
+;	Mark a value to indicate we need to go to that value
+; e.g. we pressed 4
+; floor_register: 0 1 2 3 4 5 6 7 8 9, temp1 = 4
+; floor register = 0, temp1 != 0 (4), dec temp1
+; floor register = 1, temp1 != 0 (3), dec temp1
+; floor register = 2, temp1 != 0 (2), dec temp1
+; floor register = 3, temp1 != 0 (1), dec temp1
+; floor register = 4, temp1 = 0, store register value here
 add_to_register:
 	ldi ZL, low(floor_register)
 	ldi ZH, high(floor_register)
@@ -318,15 +375,17 @@ find_placement:
 	breq store_register_val
 
 	adiw ZH:ZL, 1
-	subi temp1, 1
+	dec temp1
 	jmp find_placement
 store_register_val:
 	st Z, temp1
-	rjmp main
+	mov temp2, cmask
+	ldi pushed, 1
+	rjmp MAIN
 
 ;	Do nothing, return to main
 letters:
-	rjmp main
+	rjmp MAIN
 
 ;	Case for symbols
 symbols:
@@ -339,25 +398,28 @@ symbols:
 	breq zero_case
 
 ;	Hash symbol, ignore it
-	rjmp main
+	rjmp MAIN
 
 emergency:
 	clear_floor_reg floor_register
 	ldi ZL, low(floor_register)
 	ldi ZH, high(floor_register)
+	mov temp2, cmask
 	ldi pushed, 1
-	
+
 	ldi temp1, 1
 	st Z, temp1
-	rjmp main
+	rjmp MAIN 
 
 zero_case:
-	ldi temp2, 1
+	ldi temp1, 1
 	ldi ZL, low(floor_register)
 	ldi ZH, high(floor_register)
-	st Z, temp2
+	st Z, temp1
+
+	mov temp2, cmask
 	ldi pushed, 1
-	rjmp main
+	rjmp MAIN
 
 ;	Timer that counts two seconds
 Timer0OVF:
@@ -370,105 +432,94 @@ Timer0OVF:
 	push YL
 	push r25
 	push r24
-
-;	Check what direction to go depending on what dir is defined
-CHECK_DIR:
-	cpi dir, 1
-	breq ITERATE_UP
-
-	jmp ITERATE_DOWN
-
-;	Lift is moving up, scan floors from the bottom.
-;	Check if the floor register is checked. If it is, we check if we are on that floor at the moment. 
-;	If so, then we wait one second instead of two seconds for the door.
-
-ITERATE_UP:
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-	ldi temp1, 0
-CHECK_FLOOR_U:
-	cpi Z, 1
-	breq CHECK_IF_U
-
-	adiw ZL:ZH, 1
-	inc temp1
-	jmp CHECK_FLOOR_U
-
-;	If you are currently on this floor, then wait for one second instead of the usual two. 
-;	If push buttom is pushed, or wait period is over, we change the value of the current thingy
-CHECK_IF_U:
-	cpi temp1, curr_floor
-	breq stop_here
 	
-	do_something_else
-	
-stop_here:
-	...
-
-ITERATE_DOWN:
-	ldi ZL, low(floor_register)
-	ldi ZH, high(floor_register)
-	adiw ZL:ZH, 10
-	ldi temp1, 10
-CHECK_FLOOR_D:
-	cpi Z, 1
-	breq CHECK_IF_D
-	
-	subi ZL:ZH, 1
-	dec temp1
-	jmp CHECK_FLOOR_D
-	
-CHECK_IF_D:
-	cpi temp1, curr_floor
-	brlt do_something_d
-	
-	do_something_else
-	
-
-;	Increment the tempCounter, when tempCounter hits 1 second, add 1 second to secondCounter. When secondCounter has hit 2, increment curr_floor
+;	Increment tempCounter
 INCREMENT_TIMER:
 ;	increment tempCounter
 	lds r24, tempCounter
 	lds r25, tempCounter+1
 	adiw r25:r24, 1
 
-;	Check if it has been one second, if it hasnt,
-;	store the tempCounter value
+;	If it has been one second, inc secondCounter, clear tempCounter, store value of secondCounter
+;	Otherwise store tempCounter value
 	cpi r24, low(7812)
 	ldi temp1, high(7812)
 	cpc r25, temp1
 	brne NOTSECOND
-	
-;	Otherwise it has been a second, reset tempCounter
-;	and increment secondCounter
 	clear_timer tempCounter
 	lds r24, secondCounter
 	inc r24
 	sts secondCounter, r24
-	
-	cpi r24, 2
-	breq CHANGE_FLOOR
-	
-	rjmp ENDIF
 
-CHANGE_FLOOR:
-	cpi dir, 1
-	breq CHANGE_FLOOR_U
-	rjmp CHANGE_FLOOR_D
-CHANGE_FLOOR_U:
-	inc curr_floor
-	clear_sec_timer secondCounter
-	rjmp ENDIF
-CHANGE_FLOOR_D:
-	dec curr_floor
-	clear_sec_timer secondCounter
-	rjmp ENDIF
+;	If elevator is moving, we change the floor
+	cpi ele_status, 1
+	breq moving_elevator
+
+;	If elevator is opening doors	
+	cpi ele_status, 2
+	breq opening_doors
 	
+	cpi ele_status, 3
+	breq door_idle
+	
+
 NOTSECOND:
 	sts tempCounter, r24
-	sts tempCounter+1, r24
+	sts tempCounter+1, r25
+	rjmp ENDIF	
+	
+	
+;	If it has been two seconds, we change the floor
+;	Otherwise we end the timer
+moving_elevator:
+	cpi r24, 2
+	breq change_floor
+	rjmp ENDIF
+change_floor:
+	cpi dir, 1
+	breq change_floor_u
+	rjmp change_floor_d
+change_floor_u:
+	inc curr_floor
+	clear secondCounter
+	rjmp ENDIF
+change_floor_d:
+	dec curr_floor
+	clear secondCounter
 	rjmp ENDIF
 
+;	If opening doors, check if it has been one second
+;	If so, go to idle state (leave door open for three seconds)
+opening_doors:
+	cpi r24, 1
+	breq to_idle
+	rjmp ENDIF
+	
+to_idle:
+	ldi ele_status, 2
+	clear secondCounter
+	rjmp ENDIF
+
+door_idle:
+	cpi r24, 3
+	breq to_close
+	
+to_close:
+	ldi ele_status, 3
+	clear secoundCounter
+	rjmp ENDIF
+
+closing_doors:
+	cpi r24, 1
+	breq door_closed
+	rjmp ENDIF
+	
+door_closed:
+	ldi ele_status, 0
+	clear secondTimer
+	rjmp ENDIF
+	
+;	return from timer	
 ENDIF:
 	pop r24 					; Epilogue starts;
 	pop r25 					; Restore all conflict registers from the stack.
@@ -476,10 +527,35 @@ ENDIF:
 	pop YH
 	pop ZL
 	pop ZH
-	pop temp2
 	pop temp1
 	out SREG, temp
 	reti
+	
+;;;;;;	Experimental!!
+;	Interrupt triggered by push button
+;	Changes elevator door from waiting while open to closing
+EXT_INT0:
+	push temp1
+	in temp1, SREG
+	push temp1
+	
+	cpi ele_status, 2
+	breq skip_idle
+	
+	jmp EXIT_THIS
+
+skip_idle:
+	ldi ele_status, 3
+	rjmp EXIT_THIS
+
+EXIT_THIS:
+	pop temp1
+	out SREG, temp1
+	pop temp1
+	reti
+;;;;;;	Experimental!!
+	
+
 
 .dseg
 floor_register:
@@ -489,6 +565,3 @@ tempCounter:
 secondCounter:
 	.byte 1
 
-.cseg
-.org OVF0addr
-	jmp Timer0OVF
