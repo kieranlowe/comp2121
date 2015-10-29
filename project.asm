@@ -1,14 +1,16 @@
 .include "m2560def.inc"
 
+.org INT0addr
+	jmp EXT_INT0
+
 .dseg
 floor_register: .byte 10
 tempCounter: .byte 2
 secondCounter: .byte 1
-		
+
 .cseg
 .org OVF0addr
 	jmp Timer0OVF
-
 
 .macro do_lcd_command
 	ldi r16, @0
@@ -173,7 +175,6 @@ sleep_5ms:
 .equ INITCOLMASK = 0xEF				; 1110 1111, scan from right most column
 .equ INITROWMASK = 0x01				; 0000 0001, and top row
 .equ ROWMASK = 0x0F					; 0000 1111, use to obtain input from portL
-
 
 
 RESET:
@@ -546,28 +547,68 @@ INCREMENT_TIMER:
 	ldi temp1, high(7812)
 	cpc r25, temp1
 	brne NOTSECOND
+	
 	clear_timer tempCounter
 	lds r24, secondCounter
 	inc r24
 	sts secondCounter, r24
 
-;	If elevator is moving, we change the floor
-	cpi ele_status, 1
-	breq moving_elevator
-
 ;	If elevator is opening doors	
 	cpi ele_status, 2
 	breq opening_doors
 	
+;	If elevator doors are open
 	cpi ele_status, 3
 	breq door_idle
 	
+;	If elevator doors are closing
+	cpi ele_status, 4
+	breq door_closing
+	
+;	If elevator is moving, we change the floor
+	cpi ele_status, 1
+	breq moving_elevator	
 
 NOTSECOND:
 	sts tempCounter, r24
 	sts tempCounter+1, r25
-	rjmp ENDIF	
+	rjmp ENDIF		
 	
+;	If opening doors, check if it has been one second
+;	If so, change ele_status to 3 (leave door open for three seconds)
+opening_doors:
+	cpi r24, 2
+	breq to_idle
+	rjmp ENDIF
+	
+to_idle:
+	ldi ele_status, 2
+	clear secondCounter
+	rjmp ENDIF
+
+;	If waiting for people to get in/out, check if it has been 3 seconds
+;	If so, change ele_status to 4 (start closing the door)
+door_idle:
+	cpi r24, 3
+	breq to_close
+	rjmp ENDIF
+	
+to_close:
+	ldi ele_status, 4
+	clear secondCounter
+	rjmp ENDIF
+
+;	If closing doors, check if it has been one second
+;	If so, change ele_status to 0 (elevator idle) and drop the current floor from the floor_register	
+door_closing:
+	cpi r24, 1
+	breq door_closed
+	rjmp ENDIF
+	
+door_closed:
+	ldi ele_status, 0
+	clear secondCounter
+	jmp drop_floor
 	
 ;	If it has been two seconds, we change the floor
 ;	Otherwise we end the timer
@@ -587,37 +628,24 @@ change_floor_d:
 	dec curr_floor
 	clear secondCounter
 	rjmp ENDIF
-
-;	If opening doors, check if it has been one second
-;	If so, go to idle state (leave door open for three seconds)
-opening_doors:
-	cpi r24, 1
-	breq to_idle
-	rjmp ENDIF
+		
+;	If we have closed the doors, we want to drop the floor we stopped at
+;	from the floor_register
+drop_floor:
+	ldi ZL, low(floor_register)
+	ldi ZH, high(floor_register)
+	ldi temp1, 0
+iterate_drop:
+	cp temp1, curr_floor
+	breq drop_me
 	
-to_idle:
-	ldi ele_status, 2
-	clear secondCounter
-	rjmp ENDIF
-
-door_idle:
-	cpi r24, 3
-	breq to_close
+	inc temp1
+	adiw ZH:ZL, 1
+	jmp iterate_drop
+drop_me:
+	ldi temp2, 0
+	st Z, temp2
 	
-to_close:
-	ldi ele_status, 3
-	clear secondCounter
-	rjmp ENDIF
-
-closing_doors:
-	cpi r24, 1
-	breq door_closed
-	rjmp ENDIF
-	
-door_closed:
-	ldi ele_status, 0
-	clear secondCounter
-	rjmp ENDIF
 	
 ;	return from timer	
 ENDIF:
@@ -627,6 +655,7 @@ ENDIF:
 	pop YH
 	pop ZL
 	pop ZH
+	pop temp2
 	pop temp1
 	out SREG, temp
 	reti

@@ -1,5 +1,5 @@
 
-AVRASM ver. 2.1.42  C:\Users\matvign\Documents\comp2121_ass\project.asm Thu Oct 29 21:51:58 2015
+AVRASM ver. 2.1.42  C:\Users\matvign\Documents\comp2121_ass\project.asm Thu Oct 29 22:09:31 2015
 
 
 EQU  SIGNATURE_000 0000001e
@@ -1359,6 +1359,7 @@ EQU  URXC3addr    0000006c
 EQU  UDRE3addr    0000006e
 EQU  UTXC3addr    00000070
 EQU  INT_VECTORS_SIZE 00000072
+CSEG EXT_INT0     000001fb
 DSEG floor_register 00000200
 DSEG tempCounter  0000020a
 DSEG secondCounter 0000020c
@@ -1427,18 +1428,20 @@ CSEG store_register_val 0000016a
 CSEG emergency    00000174
 CSEG zero_case    00000188
 CSEG INCREMENT_TIMER 00000198
-CSEG NOTSECOND    000001b1
-CSEG moving_elevator 000001b6
-CSEG opening_doors 000001c8
-CSEG door_idle    000001d1
-CSEG ENDIF        000001e2
-CSEG change_floor 000001b9
-CSEG change_floor_u 000001bc
-CSEG change_floor_d 000001c2
-CSEG to_idle      000001cb
-CSEG to_close     000001d3
-CSEG closing_doors 000001d9
-CSEG door_closed  000001dc
-CSEG EXT_INT0     000001eb
-CSEG skip_idle    000001f2
-CSEG EXIT_THIS    000001f4
+CSEG NOTSECOND    000001b3
+CSEG opening_doors 000001b8
+CSEG door_idle    000001c1
+CSEG door_closing 000001ca
+CSEG moving_elevator 000001d4
+CSEG ENDIF        000001f1
+CSEG to_idle      000001bb
+CSEG to_close     000001c4
+CSEG door_closed  000001cd
+CSEG drop_floor   000001e6
+CSEG change_floor 000001d7
+CSEG change_floor_u 000001da
+CSEG change_floor_d 000001e0
+CSEG iterate_drop 000001e9
+CSEG drop_me      000001ef
+CSEG skip_idle    00000202
+CSEG EXIT_THIS    00000204
