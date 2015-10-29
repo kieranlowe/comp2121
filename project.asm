@@ -592,7 +592,7 @@ door_idle:
 	cpi r24, 3
 	breq to_close
 	rjmp ENDIF
-	
+
 to_close:
 	ldi ele_status, 4
 	clear secondCounter
@@ -623,12 +623,20 @@ change_floor:
 change_floor_u:
 	inc curr_floor
 	clear secondCounter
+	cp curr_floor, next_floor
+	breq set_to_open
 	rjmp ENDIF
 change_floor_d:
 	dec curr_floor
 	clear secondCounter
+	cp curr_floor, next_floor
+	breq set_to_open
 	rjmp ENDIF
-		
+
+set_to_open:
+	ldi ele_status, 2
+	rjmp ENDIF
+	
 ;	If we have closed the doors, we want to drop the floor we stopped at
 ;	from the floor_register
 drop_floor:
