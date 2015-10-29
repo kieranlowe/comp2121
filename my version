@@ -67,7 +67,7 @@
 .def dir = r23						; 0 means down, 1 means up
 .def curr_floor = r24				; current floor of elevator
 .def next_floor = r25				; next floor to move to
-.def ele_status = r26				; 0 = idle, 1 = closed, 2 = opening doors, 3 = idle open, 4 = closing doors
+.def ele_status = r26				; 0 = idle, 1 = closed, 2 = opening doors, 3 = door idle open, 4 = closing doors
 
 .equ number_w = 0x30				; binary for 0011, used to write numbers (i.e. 0011 0001 is 1)
 
@@ -529,7 +529,7 @@ closing_doors:
 door_closed:
 	ldi ele_status, 0
 	clear secondTimer
-	rjmp ENDIF
+	jmp drop_floor
 	
 ;	If it has been two seconds, we change the floor
 ;	Otherwise we end the timer
@@ -549,6 +549,23 @@ change_floor_d:
 	dec curr_floor
 	clear secondCounter
 	rjmp ENDIF
+
+;	If we have closed the doors, we want to drop the floor we stopped at
+;	from the floor_register
+drop_floor:
+	ldi ZL, low(floor_register)
+	ldi ZH, high(floor_register)
+	ldi temp1, 0
+iterate_drop:
+	cpi temp1, curr_floor
+	breq drop_me
+	
+	inc temp1
+	adiw ZH:ZL, 1
+	jmp iterate_drop
+drop_me:
+	ldi temp2, 0
+	st Z, temp2
 	
 ;	return from timer	
 ENDIF:
@@ -558,6 +575,7 @@ ENDIF:
 	pop YH
 	pop ZL
 	pop ZH
+	pop temp2
 	pop temp1
 	out SREG, temp
 	reti
@@ -576,11 +594,8 @@ EXT_INT0:
 	push temp1
 	
 	cpi ele_status, 2
-	breq skip_idle
+	brne EXIT_THIS
 	
-	jmp EXIT_THIS
-
-skip_idle:
 	ldi ele_status, 3
 	rjmp EXIT_THIS
 
