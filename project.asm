@@ -10,7 +10,6 @@ secondCounter: .byte 1
 	jmp Timer0OVF
 
 
-
 .macro do_lcd_command
 	ldi r16, @0
 	rcall lcd_command
@@ -203,7 +202,7 @@ RESET:
 	do_lcd_command 0b00001100 		; display on, cursor on, no blink
 
 ;	Setup timer and enable interrupt
-	clear tempCounter  				; Initialize the temporary counter to 0
+	clear_timer tempCounter  				; Initialize the temporary counter to 0
 	clear secondCounter  			; Initialize the second counter to 0
 	ldi temp1, 0b00000000
 	out TCCR0A, temp
@@ -281,15 +280,19 @@ READY:
 	
 ;	Find the floor we need to go to
 FIND_NEXT_FLOOR:
+	ldi ZH, high(floor_register)
+	ldi ZL, low(floor_register)
+
 	ldi r27, 0							; store the floor we're at
 	ldi temp1, 10
 	ldi temp2, 0
 	ldi col, 2							; borrow this register for a bit
 
 CHECK_FLOOR:
-	cpi Z, 1
+	ld row, Z+							; borrow this register for a bit
+	cpi row, 1
 	breq floor_marked
-	
+
 	jmp TO_NEXT_FLOOR
 	
 floor_marked:
@@ -340,7 +343,6 @@ change_temp2:
 
 TO_NEXT_FLOOR:
 	inc r27
-	adiw ZH:ZL, 1
 	cpi r27, 10
 	breq SEARCH_END
 	
@@ -386,12 +388,15 @@ RUN_TIMER:
 	
 colloop:
 	cpi col, 4
-	breq MAIN					; restart the scan
+	breq AGAIN					; restart the scan
 
 	sts PORTL, cmask
 	ldi temp1, 0xFF				; load temp1 with 1111 1111
 	
 	jmp delay
+
+AGAIN:
+	rjmp MAIN
 
 ;	Debounce
 delay:
@@ -601,7 +606,7 @@ door_idle:
 	
 to_close:
 	ldi ele_status, 3
-	clear secoundCounter
+	clear secondCounter
 	rjmp ENDIF
 
 closing_doors:
@@ -611,7 +616,7 @@ closing_doors:
 	
 door_closed:
 	ldi ele_status, 0
-	clear secondTimer
+	clear secondCounter
 	rjmp ENDIF
 	
 ;	return from timer	
