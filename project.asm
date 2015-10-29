@@ -1,5 +1,16 @@
 .include "m2560def.inc"
 
+.dseg
+floor_register: .byte 10
+tempCounter: .byte 2
+secondCounter: .byte 1
+		
+.cseg
+.org OVF0addr
+	jmp Timer0OVF
+
+
+
 .macro do_lcd_command
 	ldi r16, @0
 	rcall lcd_command
@@ -115,11 +126,36 @@ lcd_wait_loop:
 	pop r16
 	ret
 
+.equ F_CPU = 16000000
+.equ DELAY_1MS = F_CPU / 4 / 1000 - 4
+; 4 cycles per iteration - setup/call-return overhead
+
+sleep_1ms:
+	push r24
+	push r25
+	ldi r25, high(DELAY_1MS)
+	ldi r24, low(DELAY_1MS)
+delayloop_1ms:
+	sbiw r25:r24, 1
+	brne delayloop_1ms
+	pop r25
+	pop r24
+	ret
+
+sleep_5ms:
+	rcall sleep_1ms
+	rcall sleep_1ms
+	rcall sleep_1ms
+	rcall sleep_1ms
+	rcall sleep_1ms
+	ret
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; End Macros ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 .def temp1 = r16
 .def temp2 = r17
+.def temp = r27
 
 .def row = r18
 .def col = r19
@@ -139,14 +175,7 @@ lcd_wait_loop:
 .equ INITROWMASK = 0x01				; 0000 0001, and top row
 .equ ROWMASK = 0x0F					; 0000 1111, use to obtain input from portL
 
-.dseg
-floor_register: .byte 10
-tempCounter: .byte 2
-secondCounter: .byte 1
-		
-.cseg
-.org OVF0addr
-	jmp Timer0OVF
+
 
 RESET:
 	ldi temp1, low(RAMEND)			; initialise a stack
