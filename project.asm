@@ -1,5 +1,6 @@
 .include "m2560def.inc"
-
+.def curr_floor = r15				; 0-9 indicates floor
+.def next_floor = r14				; 0-9 indicates next floor to move to
 .def temp1 = r16
 .def temp2 = r17
 
@@ -10,8 +11,6 @@
 
 .def pushed = r22
 .def dir = r23
-.def curr_floor = r15				; 0-9 indicates floor
-.def next_floor = r14				; 0-9 indicates next floor to move to
 .def ele_status = r24				; elevator status, 0 = idle, 1 = moving, 2 = doors opening, 3 = doors idle, 4 = doors closing
 
 .equ number_w = 0x30
