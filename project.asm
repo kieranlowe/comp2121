@@ -121,10 +121,8 @@ secondCounter: .byte 1						; secondCounter, counts seconds tempCounter has done
 .cseg
 .org 0
 	jmp RESET
-;	Experimental
 .org INT0addr
 	jmp EXT_INT0
-;	Experimental
 .org OVF0addr
 	jmp Timer0OVF
 	
@@ -171,10 +169,17 @@ RESET:
 	do_lcd_command 0b00001100 ; Cursor on, bar, no blink
 
 	print_stats
-	
+		
 ;	Setup pull up register
 	ldi temp1, PORTLDIR			; load temp1 with 1111 0000
 	sts DDRL, temp1				; store into pinL
+	
+;	Setup external interrupt
+	ldi temp1, (2 << ISC00)
+	sts EICRA, temp1
+	in temp1, EIMSK
+	ori temp1, (1<<INT0)
+	out EIMSK, temp1	
 	
 	ldi temp1, 0b00000000
 	out TCCR0A, temp1
@@ -598,13 +603,15 @@ EXT_INT0:
 	push temp1
 	in temp1, SREG
 	push temp1
-	
+
 	cpi ele_status, 3
 	breq interrupt_door_idle
 
 	jmp END_EXT_INT0
 
 interrupt_door_idle:
+	clear_tempCounter
+	clear secondCounter
 	ldi ele_status, 4
 	
 END_EXT_INT0:
