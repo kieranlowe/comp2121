@@ -10,9 +10,9 @@
 
 .def pushed = r22
 .def dir = r23
-.def curr_floor = r24				; 0-9 indicates floor
-.def next_floor = r25				; 0-9 indicates next floor to move to
-.def ele_status = r26				; elevator status, 0 = idle, 1 = moving, 2 = doors opening, 3 = doors idle, 4 = doors closing
+.def curr_floor = r15				; 0-9 indicates floor
+.def next_floor = r14				; 0-9 indicates next floor to move to
+.def ele_status = r24				; elevator status, 0 = idle, 1 = moving, 2 = doors opening, 3 = doors idle, 4 = doors closing
 
 .equ number_w = 0x30
 
@@ -146,9 +146,9 @@ RESET:
 	
 	ldi pushed, 0
 	ldi dir, 1
-	ldi curr_floor, 0
-	ldi next_floor, 0
-	ldi ele_status, 0
+	clr curr_floor
+	clr next_floor
+	clr ele_status 
 	
 ;	Setup LCD, use portf, porta as output
 	ser temp1									
