@@ -20,6 +20,9 @@
 .equ INITROWMASK = 0x01
 .equ ROWMASK = 0x0F
 
+.equ led_up = 0x01
+.equ led_down = 0x10
+
 .macro do_lcd_command
 	ldi temp1, @0
 	rcall lcd_command
@@ -117,6 +120,7 @@ floor_array: .byte 10						; floor array, represents floors 0-9, one byte each
 store_pushed: .byte 1						; stores cmask value to check if a button is being held
 tempCounter: .byte 2						; tempCounter, counts to one second, does not exceed one second
 secondCounter: .byte 1						; secondCounter, counts seconds tempCounter has done
+led_pattern: .byte 1
 
 .cseg
 .org 0
@@ -148,13 +152,18 @@ RESET:
 	clr ele_status 
 	
 ;	Setup LCD, use portf, porta as output
-	ser temp1									
+	ser temp1
+	out DDRC, temp1
 	out DDRF, temp1
 	out DDRA, temp1
 	clr temp1
 	out PORTF, temp1
 	out PORTA, temp1
 
+	ldi temp1, led_up
+	sts led_pattern, temp1
+	out PORTC, temp1
+	
 ;	Setup LCD...
 	do_lcd_command 0b00111000 ; matrix of 2x5x7
 	rcall sleep_5ms
@@ -361,7 +370,7 @@ to_elevator_idle:
 emergency_state:
 	jmp END_THIS
 
-	
+
 MOVE_ELEVATOR:
 	cpi r28, 2
 	breq change_floor
@@ -689,16 +698,20 @@ Timer0OVF:
 	lds r28, tempCounter
 	lds r29, tempCounter+1
 	adiw r29:r28, 1
-	
+
 	cpi r28, low(7812)
 	ldi temp1, high(7812)
 	cpc r29, temp1
-	brne NOTSECOND
-	
-	clear tempCounter
+	breq ONESECOND
+
+	jmp NOTSECOND
+
+ONESECOND:
+	clear_tempCounter
 	lds r28, secondCounter
 	inc r28
 	sts secondCounter, r28
+	rjmp ENDIF
 	
 NOTSECOND:
 	sts tempCounter, r28
