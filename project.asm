@@ -106,6 +106,11 @@
 	do_lcd_data ':'
 	do_lcd_data ' '
 	do_lcd_data_alt next_floor
+	do_lcd_data ' '
+;	do_lcd_data 'E'
+;	do_lcd_data_alt ele_status
+;	do_lcd_data 'D'
+;	do_lcd_data_alt dir
 .endmacro
 
 .dseg
@@ -117,6 +122,10 @@ secondCounter: .byte 1						; secondCounter, counts seconds tempCounter has done
 .cseg
 .org 0
 	jmp RESET
+;	Experimental
+.org INT0addr
+	jmp EXT_INT0
+;	Experimental
 .org OVF0addr
 	jmp Timer0OVF
 	
@@ -582,6 +591,31 @@ ENDIF:
 	out SREG, temp1
 	pop temp1
 	reti
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+EXT_INT0:
+	push temp1
+	in temp1, SREG
+	push temp1
+	
+	cpi ele_status, 3
+	breq interrupt_door_idle
+
+	jmp END_EXT_INT0
+
+interrupt_door_idle:
+	ldi ele_status, 4
+	
+END_EXT_INT0:
+	pop temp1
+	out SREG, temp1
+	pop temp1
+	reti
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	
 end:
 	rjmp end	
