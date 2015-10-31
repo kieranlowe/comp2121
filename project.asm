@@ -105,7 +105,7 @@
 	do_lcd_data ':'
 	do_lcd_data ' '
 	do_lcd_data_alt next_floor
-	do_lcd_data ' '
+;	do_lcd_data ' '
 ;	do_lcd_data 'E'
 ;	do_lcd_data_alt ele_status
 ;	do_lcd_data 'D'
@@ -180,7 +180,8 @@ RESET:
 	in temp1, EIMSK
 	ori temp1, (1<<INT0)
 	out EIMSK, temp1	
-	
+
+;	Setup timer interrupt	
 	ldi temp1, 0b00000000
 	out TCCR0A, temp1
 	ldi temp1, 0b00000010
@@ -193,10 +194,24 @@ RESET:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 	
 MAIN:
+	cpi dir, 2
+	breq START_EMERGENCY
 	cpi ele_status, 2
 	brlt FIND_NEXT_FLOOR
-	
 	jmp CHECK_ELEVATOR
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+
+START_EMERGENCY:
+	ldi temp1, 0
+	cp curr_floor, temp1
+	breq ALREADY_EMERGENCY_FLOOR
+	jmp EMERGENCY_MAIN	
+
+ALREADY_EMERGENCY_FLOOR:
+	ldi ele_status, 2
+	jmp CHECK_ELEVATOR	
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -320,7 +335,7 @@ to_door_idle:
 	ldi ele_status, 3
 	clear secondCounter
 	jmp END_THIS	
-	
+
 DOOR_IDLE:
 	cpi r28, 3
 	breq to_door_closing
@@ -334,12 +349,18 @@ to_door_closing:
 DOOR_CLOSING:
 	cpi r28, 1
 	breq to_elevator_idle
-	jmp END_THIS	
+	jmp END_THIS
 
 to_elevator_idle:
 	ldi ele_status, 0
 	clear secondCounter
-	jmp drop_floor	
+
+	cpi dir, 2
+	breq emergency_state
+	jmp drop_floor
+emergency_state:
+	jmp END_THIS
+
 	
 MOVE_ELEVATOR:
 	cpi r28, 2
@@ -352,9 +373,7 @@ change_floor:
 	breq change_floor_u
 	jmp change_floor_d
 
-;	Increment curr floor
-;	check if arrived at destination, change elevator status to opening doors, clear display and print new stats
-;	Otherwise just print new stats
+;	Increment/Decrement curr floor
 change_floor_u:
 	inc curr_floor
 	cp curr_floor, next_floor
@@ -390,22 +409,23 @@ drop_me:
 	
 END_THIS_ALT:
 	print_stats
-	
-	cpi pushed, 1
-	breq HOLD
-	
-	jmp SCAN
-
 
 END_THIS:	
+	cpi dir, 2
+	breq back_to_emergency
+	
 	cpi pushed, 1
 	breq HOLD
 	
 	jmp SCAN
+	
+back_to_emergency:
+	jmp EMERGENCY_MAIN	
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;	Put this here to avoid branch out of reach
 HOLD:
 	lds temp2, store_pushed
 	sts PORTL, temp2
@@ -419,9 +439,11 @@ RELEASE:
 	ldi pushed, 0
 	jmp MAIN	
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;	
-;;;;;;;;;;;;;;;;;;;;;;;;;;;		
-	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;	Put this here to avoid branch out of reach...
 change_next_floor_u:
 	mov next_floor, temp1
 	ldi dir, 1
@@ -435,10 +457,80 @@ change_next_floor_d:
 	ldi ele_status, 1
 	print_stats
 	jmp CHECK_ELEVATOR
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+EMERGENCY_MAIN:
+	ldi temp1, 0
+	cp curr_floor, temp1
+	breq EMERGENCY_STOP
 	
+	cpi ele_status, 2
+	brlt EMERGENCY_MOVE
+
+	ldi ele_status, 4
+	jmp CHECK_ELEVATOR
+
+EMERGENCY_MOVE:
+	ldi ele_status, 1
+	jmp CHECK_ELEVATOR	
+	
+EMERGENCY_STOP:
+	cpi ele_status, 0
+	breq EMERGENCY_IDLE
+	
+	jmp CHECK_ELEVATOR	
+	
+EMERGENCY_IDLE:
+	do_lcd_command 0b00000001 ; clear display
+	do_lcd_data 'E'
+	do_lcd_data 'm'
+	do_lcd_data 'e'
+	do_lcd_data 'r'
+	do_lcd_data 'g'
+	do_lcd_data 'e'
+	do_lcd_data 'n'
+	do_lcd_data 'c'
+	do_lcd_data 'y'
+	do_lcd_command 0b11000000 	; set address to second line
+	do_lcd_data 'C'
+	do_lcd_data 'a'
+	do_lcd_data 'l'
+	do_lcd_data 'l'
+	do_lcd_data ' '
+	do_lcd_data '0'
+	do_lcd_data '0'
+	do_lcd_data '0'
+EMERGENCY_WAIT:
+	lds temp2, store_pushed
+	sts PORTL, temp2
+	lds temp1, PINL
+	andi temp1, ROWMASK
+	cpi temp1, 0xF
+	breq EMERGENCY_WAIT				; if column not pushed, repeat above code
+
+	ldi rmask, 0b00001000
+	mov temp2, temp1
+	and temp2, rmask				; if column and row being pushed, end
+	breq EMERGENCY_FINISH
+
+	jmp EMERGENCY_WAIT
+EMERGENCY_FINISH:
+	ldi dir, 1
+	clr curr_floor
+	clr next_floor
+	clr ele_status
+	clear_tempCounter
+	clear secondCounter
+
+	print_stats
+	jmp HOLD
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;		
-	
+
 SCAN:
 	ldi cmask, INITCOLMASK
 	clr col
@@ -447,6 +539,7 @@ SCAN:
 		
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+
 
 BACK_TO_MAIN:
 	jmp MAIN
@@ -457,8 +550,6 @@ colloop:
 	
 	sts PORTL, cmask
 	ldi temp1, 0xFF
-	
-	jmp delay
 	
 delay:
 	dec temp1
@@ -471,7 +562,7 @@ delay:
 
 	ldi temp2, 0xFF
 
-delay2:							; wait?
+delay2:							; slow scan operation
 	dec temp2
 	nop
 	nop
@@ -537,11 +628,38 @@ letters:
 	jmp MAIN
 	
 symbols:
+	cpi col, 0
+	breq emergency_case
+
 	cpi col, 1
 	breq zero_case
 	
 	jmp MAIN
-	
+
+emergency_case:
+	clr next_floor
+	ldi dir, 2
+	ldi pushed, 1
+	clear_floor_array
+	clear secondCounter
+	sts store_pushed, cmask
+	mov temp2, cmask
+	do_lcd_data '*'
+	jmp EMERGENCY_HOLD
+
+EMERGENCY_HOLD:
+;	do_lcd_data 'A'
+	sts PORTL, temp2
+	nop
+	nop
+	lds temp1, PINL
+	andi temp1, ROWMASK
+	cpi temp1, 0xF
+	breq EMERGENCY_RELEASE
+	jmp EMERGENCY_HOLD
+EMERGENCY_RELEASE:
+	jmp START_EMERGENCY
+
 zero_case:
 	ldi ZH, high(floor_array)
 	ldi ZL, low(floor_array)
@@ -585,6 +703,7 @@ Timer0OVF:
 NOTSECOND:
 	sts tempCounter, r28
 	sts tempCounter+1, r29
+
 ENDIF:
 	pop r29
 	pop r28
