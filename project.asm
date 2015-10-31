@@ -22,6 +22,7 @@
 
 .equ led_up = 0x01
 .equ led_down = 0x10
+.equ led_doors_idle = 0xC3
 
 .macro do_lcd_command
 	ldi temp1, @0
@@ -68,7 +69,7 @@
 	st Y, temp1
 .endmacro
 
-;	Clear one byte values (secondCounter and store_pushed)
+;	Clear one byte values (secondCounter and store_pushed, led_pattern)
 .macro clear
 	ldi YL, low(@0)
 	ldi YH, high(@0)
@@ -342,6 +343,9 @@ DOOR_OPENING:
 
 to_door_idle:
 	ldi ele_status, 3
+	clear led_pattern
+	ldi temp1, led_doors_idle
+	sts led_pattern, temp1
 	clear secondCounter
 	jmp END_THIS	
 
@@ -707,6 +711,43 @@ Timer0OVF:
 	jmp NOTSECOND
 
 ONESECOND:
+	lds temp1, led_pattern
+	cpi ele_status, 1
+	breq led_move_ud
+
+	cpi ele_status, 2
+	breq led_open_door
+
+	cpi ele_status, 4
+	breq led_close_door
+	jmp timer_portion
+	
+led_move_ud:
+	cpi dir, 1
+	breq led_move_up
+	jmp led_move_down
+led_move_up:
+	cpi temp1, 0x80
+	brne rotate_move_up
+	rol temp1
+rotate_move_up:
+	rol temp1
+	jmp timer_portion
+led_move_down:
+	cpi temp1, 0x01
+	brne rotate_move_down
+	ror temp1
+rotate_move_down:
+	ror temp1
+	jmp timer_portion
+
+led_open_door:
+	jmp timer_portion
+led_close_door:
+	jmp timer_portion
+timer_portion:
+	sts led_pattern, temp1
+	out PORTC, temp1
 	clear_tempCounter
 	lds r28, secondCounter
 	inc r28
