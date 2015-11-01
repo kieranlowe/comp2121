@@ -1,25 +1,27 @@
 .include "m2560def.inc"
-.def curr_floor = r15				; 0-9 indicates floor
-.def next_floor = r14				; 0-9 indicates next floor to move to
+.def curr_floor = r15				; 0-9, indicates current floor
+.def next_floor = r14				; 0-9, indicates next floor to move to
 .def temp1 = r16
 .def temp2 = r17
 
-.def row = r18
-.def col = r19
-.def rmask = r20
-.def cmask = r21
+.def row = r18						; used for keypad row scan
+.def col = r19						; used for keypad col scan
+.def rmask = r20					; mask used for row scan
+.def cmask = r21					; mask used for column scan
 
-.def pushed = r22
-.def dir = r23
+.def pushed = r22					; value to indicate that a button may be being held
+.def dir = r23						; direction, 0 = down, 1 = up, 2 = emergency
 .def ele_status = r24				; elevator status, 0 = idle, 1 = moving, 2 = doors opening, 3 = doors idle, 4 = doors closing
 
-.equ number_w = 0x30
+.equ number_w = 0x30				; number used to print numbers to lcd
 
 .equ PORTLDIR = 0xF0
 .equ INITCOLMASK = 0xEF
 .equ INITROWMASK = 0x01
 .equ ROWMASK = 0x0F
 
+;	Patterns for elevator. All of them are INITIAL led states
+;	There is no pattern for elevator idle status
 .equ led_up = 0x01
 .equ led_down = 0x10
 .equ led_doors_open = 0xFF
@@ -46,6 +48,7 @@
 	rcall lcd_wait
 .endmacro
 
+;	Clears all floors that have been called for pickup
 .macro clear_floor_array
 	ldi YL, low(floor_array)
 	ldi YH, high(floor_array)
@@ -62,7 +65,7 @@
 	st Y, r16
 .endmacro
 
-;	Clear tempCounter
+;	Specific macro to clear tempCounter (2 bytes)
 .macro clear_tempCounter
 	ldi YL, low(tempCounter)
 	ldi YH, high(tempCounter)
@@ -79,6 +82,7 @@
 	st Y, temp1
 .endmacro
 
+;	Print current floor and next floor
 .macro print_stats
 	do_lcd_command 0b00000001 	; clear display
 	do_lcd_data 'C'
@@ -123,15 +127,17 @@ floor_array: .byte 10						; floor array, represents floors 0-9, one byte each
 store_pushed: .byte 1						; stores cmask value to check if a button is being held
 tempCounter: .byte 2						; tempCounter, counts to one second, does not exceed one second
 secondCounter: .byte 1						; secondCounter, counts seconds tempCounter has done
-led_pattern: .byte 1
+led_pattern: .byte 1						; led pattern that is stored and changed
 
 .cseg
 .org 0
 	jmp RESET
-.org INT0addr
-	jmp EXT_INT0
+.org INT0addr								; Close door interrupt
+	jmp CLOSE_DOOR_BUTTON
+.org INT1addr
+	jmp OPEN_DOOR_BUTTON					; Open door interrupt
 .org OVF0addr
-	jmp Timer0OVF
+	jmp Timer0OVF							; Timer
 	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -141,11 +147,12 @@ RESET:
 	out SPL, temp1
 	ldi temp1, high(RAMEND)
 	out SPH, temp1
-	
+
+;	Setup initial state of elevator
 	clear_tempCounter 			; clear timers
 	clear secondCounter
 
-	clear_floor_array			; clears floor array
+	clear_floor_array			; clear floor array
 	clear store_pushed			; clears store_pushed
 	
 	ldi pushed, 0
@@ -154,7 +161,7 @@ RESET:
 	clr next_floor
 	clr ele_status 
 	
-;	Setup LCD, use portf, porta as output
+;	Setup LCD, LED, use portA/F for LCD, portC for LED
 	ser temp1
 	out DDRC, temp1
 	out DDRF, temp1
@@ -163,6 +170,7 @@ RESET:
 	out PORTF, temp1
 	out PORTA, temp1
 
+;	Set initial pattern as full led bar
 	ldi temp1, 0xFF
 	sts led_pattern, temp1
 	out PORTC, temp1
@@ -181,19 +189,6 @@ RESET:
 	do_lcd_command 0b00001100 ; Cursor on, bar, no blink
 
 	print_stats
-
-	ldi temp1, 0b00001000
-	sts DDRL, temp1				; Bit 3 will function as OC5A.
-;	clr temp1
-	ldi temp1, 0x4A 			; the value controls the PWM duty cycle
-	sts OCR5AL, temp1
-	clr temp1
-	sts OCR5AH, temp1
-	; Set the Timer5 to Phase Correct PWM mode.
-	ldi temp1, (1 << CS50)
-	sts TCCR5B, temp1
-	ldi temp1, (1<< WGM50)|(1<<COM5A1)
-	sts TCCR5A, temp1	
 		
 ;	Setup pull up register
 	ldi temp1, PORTLDIR			; load temp1 with 1111 0000
@@ -217,7 +212,11 @@ RESET:
 	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
-	
+;	If emergency state, jump to emergency
+;	If elevator isn't doing any door operations,
+;	check what the next floor is.
+;	Do elevator operations
+
 MAIN:
 	cpi dir, 2
 	breq START_EMERGENCY
@@ -227,7 +226,10 @@ MAIN:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
-
+;	Start emergency case. If you are already on the
+;	ground floor, open the doors and do elevator operations.
+;	Otherwise, go find instructions of what to do next in
+;	EMERGENCY MAIN
 START_EMERGENCY:
 	ldi temp1, 0
 	cp curr_floor, temp1
@@ -240,7 +242,9 @@ ALREADY_EMERGENCY_FLOOR:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-		
+;	Find the next floor to move to. Use a value to indicate
+;	if there is a floor to move to. This value is also used
+;	to change elevator direction. 
 FIND_NEXT_FLOOR:
 	ldi ZH, high(floor_array)
 	ldi ZL, low(floor_array)
@@ -333,7 +337,10 @@ check_next_floor_d:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	
+;	Do operations based on elevator state
+;	Do nothing if idle
+;	Otherwise wait, change elevator status and leds, 
+;	change floor/drop floors from floor array
 CHECK_ELEVATOR:
 	lds r28, secondCounter
 			
@@ -459,7 +466,8 @@ back_to_emergency:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+;	Used to prevent scanning of keypad if a keypad button is being held
+;	Uses a stored value that checks the column of the keypad
 ;	Put this here to avoid branch out of reach...
 HOLD:
 	lds temp2, store_pushed
@@ -476,9 +484,8 @@ RELEASE:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;	Put this here to avoid branch out of reach...
+;	Part of CHECK_ELEVATOR, placed here
+;	to avoid branch out of reach...
 change_next_floor_u:
 	mov next_floor, temp1
 	cpi ele_status, 0
@@ -511,8 +518,12 @@ set_next_floor_d:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
+;	Instructions to be excuted in emergency
+;	If the elevator is in middle of some opening/closing operation,
+;	close the doors, then continue.
+;	Do not scan anything, keep calling check elevator until the elevator has arrived
+;	at the ground floor. Open the doors, close, print emergency message
+;	and wait for * to be pressed again using rmask and cmask values
 EMERGENCY_MAIN:
 	ldi temp1, 0
 	cp curr_floor, temp1
@@ -536,6 +547,9 @@ EMERGENCY_STOP:
 	
 EMERGENCY_IDLE:
 	do_lcd_command 0b00000001 ; clear display
+	do_lcd_data ' '
+	do_lcd_data ' '
+	do_lcd_data ' '
 	do_lcd_data 'E'
 	do_lcd_data 'm'
 	do_lcd_data 'e'
@@ -546,6 +560,9 @@ EMERGENCY_IDLE:
 	do_lcd_data 'c'
 	do_lcd_data 'y'
 	do_lcd_command 0b11000000 	; set address to second line
+	do_lcd_data ' '
+	do_lcd_data ' '
+	do_lcd_data ' '
 	do_lcd_data 'C'
 	do_lcd_data 'a'
 	do_lcd_data 'l'
@@ -581,7 +598,7 @@ EMERGENCY_FINISH:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;		
-
+;	Start scanning keypad
 SCAN:
 	ldi cmask, INITCOLMASK
 	clr col
@@ -590,7 +607,14 @@ SCAN:
 		
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
-
+;	If scan has been completed, return to main
+;	If value 0-9, find the corresponding value in floor_array
+;	and set that byte to one (1) to indicate the elevator call
+;	If emergency state, manually set the next floor to ground floor
+;	and clear the floor_array of values to move to.
+;	Set dir of elevator as 2 to indicate emergency.
+;	Any value that is pressed should force the elevator to not scan
+;	the keypad while something is being held down
 BACK_TO_MAIN:
 	jmp MAIN
 
@@ -699,6 +723,8 @@ emergency_case:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;	Attempt to wait until emergency button is not being held.
+;	Not necessary?
 EMERGENCY_HOLD:
 	sts PORTL, temp2
 	nop
@@ -725,7 +751,11 @@ zero_case:
 	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	
+;	Timer used to count seconds and move led lights.
+;	Seconds passed are stored in secondCounter to be used later by
+;	CHECK_ELEVATOR. Led pattern is stored so it can change later on.
+;	Leds update every second. What pattern should be displayed is 
+;	set by CHECK_ELEVATOR.
 Timer0OVF:
 	push temp1
 	in temp1, SREG
@@ -828,8 +858,11 @@ ENDIF:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-EXT_INT0:
+;	Interrupt that fires when right push button is pushed
+;	Changes the elevator status to close doors ONLY
+;	if the elevator had its doors idle (open and waiting).
+;	Also sets the led pattern
+CLOSE_DOOR_BUTTON:
 	push temp1
 	in temp1, SREG
 	push temp1
@@ -842,6 +875,8 @@ EXT_INT0:
 interrupt_door_idle:
 	clear_tempCounter
 	clear secondCounter
+	clear led_pattern
+	ldi temp1, led_doors_close
 	ldi ele_status, 4
 	
 END_EXT_INT0:
@@ -852,12 +887,39 @@ END_EXT_INT0:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;	Interrupt that fires when left push button is pushed
+;	Changes elevator status to open doors ONLY
+;	if the elevator had its doors idle (open/waiting) or was in middle of closing them
+;	Also changes led pattern
+OPEN_DOOR_BUTTON:
+	push temp1
+	in temp1, SREG
+	push temp1
+	
+	cpi ele_status, 3
+	brge interrupt_open_door
+	jmp END_EXT_INT1
+
+interrupt_open_door:
+	clear_tempCounter
+	clear secondCounter
+	clear led_pattern
+	ldi temp1, led_doors_open
+	ldi ele_status, 2
+	
+END_EXT_INT1:
+	pop temp1
+	out SREG, temp1
+	pop temp1
+	reti
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 	
 end:
-	rjmp end	
-
+	rjmp end
 	
-;Don't run this code
+;	Code used for lcd.
 ;------------------------------------------
 
 	
@@ -942,5 +1004,19 @@ sleep_5ms:
 	rcall sleep_1ms
 	ret
 
-	
+;	Code for motor	
+;	ldi temp1, 0b00001000
+;	sts DDRL, temp1				; Bit 3 will function as OC5A.
+;	clr temp1
+;	ldi temp1, 0x4A 			; the value controls the PWM duty cycle
+;	sts OCR5AL, temp1
+;	clr temp1
+;	sts OCR5AH, temp1
+;	; Set the Timer5 to Phase Correct PWM mode.
+;	ldi temp1, (1 << CS50)
+;	sts TCCR5B, temp1
+;	ldi temp1, (1<< WGM50)|(1<<COM5A1)
+;	sts TCCR5A, temp1	
+
+		
 	
