@@ -22,7 +22,9 @@
 
 .equ led_up = 0x01
 .equ led_down = 0x10
+.equ led_doors_open = 0xFF
 .equ led_doors_idle = 0xC3
+.equ led_doors_close = 0xC3
 
 .macro do_lcd_command
 	ldi temp1, @0
@@ -161,7 +163,7 @@ RESET:
 	out PORTF, temp1
 	out PORTA, temp1
 
-	ldi temp1, led_up
+	ldi temp1, 0xFF
 	sts led_pattern, temp1
 	out PORTC, temp1
 	
@@ -179,6 +181,19 @@ RESET:
 	do_lcd_command 0b00001100 ; Cursor on, bar, no blink
 
 	print_stats
+
+	ldi temp1, 0b00001000
+	sts DDRL, temp1				; Bit 3 will function as OC5A.
+;	clr temp1
+	ldi temp1, 0x4A 			; the value controls the PWM duty cycle
+	sts OCR5AL, temp1
+	clr temp1
+	sts OCR5AH, temp1
+	; Set the Timer5 to Phase Correct PWM mode.
+	ldi temp1, (1 << CS50)
+	sts TCCR5B, temp1
+	ldi temp1, (1<< WGM50)|(1<<COM5A1)
+	sts TCCR5A, temp1	
 		
 ;	Setup pull up register
 	ldi temp1, PORTLDIR			; load temp1 with 1111 0000
@@ -356,6 +371,8 @@ DOOR_IDLE:
 
 to_door_closing:
 	ldi ele_status, 4
+	clear led_pattern
+	ldi temp1, led_doors_close
 	clear secondCounter
 	jmp END_THIS
 	
@@ -367,13 +384,15 @@ DOOR_CLOSING:
 to_elevator_idle:
 	ldi ele_status, 0
 	clear secondCounter
+	clear led_pattern
+	ldi temp1, 0x00
+	sts led_pattern, temp1
 
 	cpi dir, 2
 	breq emergency_state
 	jmp drop_floor
 emergency_state:
 	jmp END_THIS
-
 
 MOVE_ELEVATOR:
 	cpi r28, 2
@@ -397,10 +416,13 @@ change_floor_d:
 	dec curr_floor
 	cp curr_floor, next_floor
 	breq to_open_doors
-	JMP END_THIS_ALT
+	jmp END_THIS_ALT
 
 to_open_doors:
 	ldi ele_status, 2
+	clear led_pattern
+	ldi temp1, led_doors_open
+	sts led_pattern, temp1
 	jmp END_THIS_ALT
 
 drop_floor:
@@ -438,7 +460,7 @@ back_to_emergency:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;	Put this here to avoid branch out of reach
+;	Put this here to avoid branch out of reach...
 HOLD:
 	lds temp2, store_pushed
 	sts PORTL, temp2
@@ -459,6 +481,14 @@ RELEASE:
 ;	Put this here to avoid branch out of reach...
 change_next_floor_u:
 	mov next_floor, temp1
+	cpi ele_status, 0
+	breq set_led_up
+	jmp set_next_floor_u
+set_led_up:
+	clear led_pattern
+	ldi temp1, led_up
+	sts led_pattern, temp1
+set_next_floor_u:
 	ldi dir, 1
 	ldi ele_status, 1
 	print_stats
@@ -466,6 +496,14 @@ change_next_floor_u:
 
 change_next_floor_d:
 	mov next_floor, temp2
+	cpi ele_status, 0
+	breq set_led_down
+	jmp set_next_floor_d
+set_led_down:
+	clear led_pattern
+	ldi temp1, led_down
+	sts led_pattern, temp1
+set_next_floor_d:
 	ldi dir, 0
 	ldi ele_status, 1
 	print_stats
@@ -552,7 +590,6 @@ SCAN:
 		
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
-
 
 BACK_TO_MAIN:
 	jmp MAIN
@@ -660,8 +697,9 @@ emergency_case:
 	do_lcd_data '*'
 	jmp EMERGENCY_HOLD
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
 EMERGENCY_HOLD:
-;	do_lcd_data 'A'
 	sts PORTL, temp2
 	nop
 	nop
@@ -672,7 +710,9 @@ EMERGENCY_HOLD:
 	jmp EMERGENCY_HOLD
 EMERGENCY_RELEASE:
 	jmp START_EMERGENCY
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	
 zero_case:
 	ldi ZH, high(floor_array)
 	ldi ZL, low(floor_array)
@@ -697,7 +737,7 @@ Timer0OVF:
 	push r29
 
 	cpi ele_status, 0
-	breq ENDIF
+	breq END_ELE_IDLE
 	
 	lds r28, tempCounter
 	lds r29, tempCounter+1
@@ -710,16 +750,19 @@ Timer0OVF:
 
 	jmp NOTSECOND
 
+END_ELE_IDLE:
+	jmp ENDIF
+
 ONESECOND:
 	lds temp1, led_pattern
 	cpi ele_status, 1
 	breq led_move_ud
 
 	cpi ele_status, 2
-	breq led_open_door
+	breq led_open
 
 	cpi ele_status, 4
-	breq led_close_door
+	breq led_close
 	jmp timer_portion
 	
 led_move_ud:
@@ -741,10 +784,24 @@ rotate_move_down:
 	ror temp1
 	jmp timer_portion
 
-led_open_door:
+led_open:
+	cpi temp1, 0xFF
+	brne led_open_door_anim
+	ldi temp1, 0xFF
 	jmp timer_portion
-led_close_door:
+led_open_door_anim:
+	ldi temp1, 0xC3
 	jmp timer_portion
+	
+led_close:
+	cpi temp1, 0xC3
+	brne led_close_door_anim
+	ldi temp1, 0xC3
+	jmp timer_portion
+led_close_door_anim:
+	ldi temp1, 0xFF
+	jmp timer_portion
+
 timer_portion:
 	sts led_pattern, temp1
 	out PORTC, temp1
@@ -886,14 +943,4 @@ sleep_5ms:
 	ret
 
 	
-ldi temp, 0b00001000
-sts DDRL, temp ; Bit 3 will function as OC5A.
-ldi temp, 0x4A ; the value controls the PWM duty cycle
-sts OCR5AL, temp
-clr temp
-sts OCR5AH, temp
-; Set the Timer5 to Phase Correct PWM mode.
-ldi temp, (1 << CS50)
-sts TCCR5B, temp
-ldi temp, (1<< WGM50)|(1<<COM5A1)
-sts TCCR5A, temp	
+	
