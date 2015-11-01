@@ -276,10 +276,10 @@ check_up_a:
 check_up_b:
 	cp r27, curr_floor
 	brge change_temp1
-	
+
 	cpi col, 1
 	brne check_down_a
-	
+
 	jmp TO_NEXT_FLOOR
 
 check_down_a:
@@ -324,8 +324,8 @@ SEARCH_END:
 	jmp CHECK_ELEVATOR
 
 check_next_floor_u:
-	cp next_floor, temp1
-	breq CHECK_ELEVATOR
+;	cp next_floor, temp1
+;	breq CHECK_ELEVATOR
 
 	jmp change_next_floor_u
 
@@ -343,7 +343,7 @@ check_next_floor_d:
 ;	change floor/drop floors from floor array
 CHECK_ELEVATOR:
 	lds r28, secondCounter
-			
+
 	cpi ele_status, 2
 	breq DOOR_OPENING
 	
@@ -382,7 +382,7 @@ to_door_closing:
 	ldi temp1, led_doors_close
 	clear secondCounter
 	jmp END_THIS
-	
+
 DOOR_CLOSING:
 	cpi r28, 1
 	breq to_elevator_idle
@@ -408,10 +408,13 @@ MOVE_ELEVATOR:
 	
 change_floor:
 	clear secondCounter
+	cp curr_floor, next_floor
+	breq to_open_doors
+	
 	cpi dir, 1
 	breq change_floor_u
 	jmp change_floor_d
-
+	
 ;	Increment/Decrement curr floor
 change_floor_u:
 	inc curr_floor
@@ -480,14 +483,13 @@ HOLD:
 RELEASE:
 	clear store_pushed
 	ldi pushed, 0
-	jmp MAIN	
+	jmp MAIN
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;	Part of CHECK_ELEVATOR, placed here
 ;	to avoid branch out of reach...
 change_next_floor_u:
-	mov next_floor, temp1
 	cpi ele_status, 0
 	breq set_led_up
 	jmp set_next_floor_u
@@ -496,11 +498,17 @@ set_led_up:
 	ldi temp1, led_up
 	sts led_pattern, temp1
 set_next_floor_u:
+	cp temp1, next_floor
+	brne printNew
+	jmp skipPrint
+printNew:
+	mov next_floor, temp1
+	print_stats
+skipPrint:
 	ldi dir, 1
 	ldi ele_status, 1
-	print_stats
 	jmp CHECK_ELEVATOR
-
+	
 change_next_floor_d:
 	mov next_floor, temp2
 	cpi ele_status, 0
