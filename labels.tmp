@@ -25,14 +25,14 @@
   <secondCounter><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>129</LINE></secondCounter>
   <led_pattern><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>130</LINE></led_pattern>
   <RESET><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>145</LINE></RESET>
-  <CLOSE_DOOR_BUTTON><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>873</LINE></CLOSE_DOOR_BUTTON>
-  <OPEN_DOOR_BUTTON><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>902</LINE></OPEN_DOOR_BUTTON>
+  <CLOSE_DOOR_BUTTON><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>874</LINE></CLOSE_DOOR_BUTTON>
+  <OPEN_DOOR_BUTTON><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>903</LINE></OPEN_DOOR_BUTTON>
   <Timer0OVF><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>767</LINE></Timer0OVF>
-  <lcd_command><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>951</LINE></lcd_command>
-  <lcd_wait><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>971</LINE></lcd_wait>
-  <sleep_5ms><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>1007</LINE></sleep_5ms>
-  <sleep_1ms><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>995</LINE></sleep_1ms>
-  <lcd_data><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>960</LINE></lcd_data>
+  <lcd_command><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>952</LINE></lcd_command>
+  <lcd_wait><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>972</LINE></lcd_wait>
+  <sleep_5ms><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>1008</LINE></sleep_5ms>
+  <sleep_1ms><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>996</LINE></sleep_1ms>
+  <lcd_data><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>961</LINE></lcd_data>
   <MAIN><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>220</LINE></MAIN>
   <START_EMERGENCY><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>233</LINE></START_EMERGENCY>
   <FIND_NEXT_FLOOR><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>248</LINE></FIND_NEXT_FLOOR>
@@ -102,24 +102,24 @@
   <EMERGENCY_RELEASE><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>745</LINE></EMERGENCY_RELEASE>
   <END_ELE_IDLE><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>791</LINE></END_ELE_IDLE>
   <ONESECOND><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>794</LINE></ONESECOND>
-  <NOTSECOND><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>852</LINE></NOTSECOND>
-  <ENDIF><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>856</LINE></ENDIF>
+  <NOTSECOND><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>853</LINE></NOTSECOND>
+  <ENDIF><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>857</LINE></ENDIF>
   <led_move_ud><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>806</LINE></led_move_ud>
-  <led_open><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>825</LINE></led_open>
-  <led_close><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>834</LINE></led_close>
-  <timer_portion><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>843</LINE></timer_portion>
+  <led_open><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>826</LINE></led_open>
+  <led_close><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>835</LINE></led_close>
+  <timer_portion><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>844</LINE></timer_portion>
   <led_move_up><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>810</LINE></led_move_up>
-  <led_move_down><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>817</LINE></led_move_down>
+  <led_move_down><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>818</LINE></led_move_down>
   <rotate_move_up><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>814</LINE></rotate_move_up>
-  <rotate_move_down><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>821</LINE></rotate_move_down>
-  <led_open_door_anim><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>830</LINE></led_open_door_anim>
-  <led_close_door_anim><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>839</LINE></led_close_door_anim>
-  <interrupt_door_idle><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>883</LINE></interrupt_door_idle>
-  <END_EXT_INT0><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>890</LINE></END_EXT_INT0>
-  <interrupt_open_door><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>911</LINE></interrupt_open_door>
-  <END_EXT_INT1><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>918</LINE></END_EXT_INT1>
-  <end><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>927</LINE></end>
-  <lcd_wait_loop><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>977</LINE></lcd_wait_loop>
-  <delayloop_1ms><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>1000</LINE></delayloop_1ms>
+  <rotate_move_down><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>822</LINE></rotate_move_down>
+  <led_open_door_anim><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>831</LINE></led_open_door_anim>
+  <led_close_door_anim><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>840</LINE></led_close_door_anim>
+  <interrupt_door_idle><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>884</LINE></interrupt_door_idle>
+  <END_EXT_INT0><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>891</LINE></END_EXT_INT0>
+  <interrupt_open_door><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>912</LINE></interrupt_open_door>
+  <END_EXT_INT1><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>919</LINE></END_EXT_INT1>
+  <end><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>928</LINE></end>
+  <lcd_wait_loop><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>978</LINE></lcd_wait_loop>
+  <delayloop_1ms><FILE>C:\Users\matvign\Documents\comp2121\project.asm</FILE><LINE>1001</LINE></delayloop_1ms>
  </LABELS>
 </ASSEMBLER_INFO>

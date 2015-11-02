@@ -487,7 +487,7 @@ RELEASE:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;	Part of CHECK_ELEVATOR, placed here
+;	Part of FIND_NEXT_FLOOR, placed here
 ;	to avoid branch out of reach...
 change_next_floor_u:
 	cpi ele_status, 0
@@ -812,8 +812,9 @@ led_move_up:
 	brne rotate_move_up
 	rol temp1
 rotate_move_up:
-	rol temp1
+	lsl temp1
 	jmp timer_portion
+
 led_move_down:
 	cpi temp1, 0x01
 	brne rotate_move_down
